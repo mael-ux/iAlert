@@ -1,0 +1,1 @@
+ALTER TABLE "interest_zone" RENAME COLUMN "text" TO "title";
