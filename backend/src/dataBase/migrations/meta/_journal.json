@@ -1,0 +1,27 @@
+{
+  "version": "7",
+  "dialect": "postgresql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "7",
+      "when": 1759781493199,
+      "tag": "0000_groovy_major_mapleleaf",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1759785970195,
+      "tag": "0001_polite_mantis",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1759788827511,
+      "tag": "0002_plain_starfox",
+      "breakpoints": true
+    }
+  ]
+}

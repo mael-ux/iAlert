@@ -1,0 +1,1 @@
+ALTER TABLE "photo_of_the_day" ALTER COLUMN "image" SET NOT NULL;
