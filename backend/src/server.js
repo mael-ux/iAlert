@@ -40,6 +40,38 @@ app.post("/api/interestZone", async (req,res) =>{
     }
 });
 
+app.delete("/api/interestZone", async (req, res) => {
+    try {
+        const {userId, zoneId} = req.params;
+
+        await db
+            .delete(interestZonesTable)
+            .where(
+                and(eq(interestZonesTable.userId,userId), eq(interestZonesTable.zoneId,parseInt(zoneId))) 
+        );
+        res.status(500).json({message: "Zone of Interest removed succesfully"});
+
+    } catch (error) {
+        console.log("Error deleting Zone of Interest", error)
+        res.status(500).json({error: "Something went wrong"})
+    }
+});
+
+app.get("/api/interestZone/:userID", async (req, res) =>{
+    try {
+        const {userId} = req.params;
+
+        const userZoneOfInterest = await db.select().from(interestZonesTable).where(eq(interestZonesTable.userId,userId))
+
+        res.status(200).json(userZoneOfInterest);
+
+    } catch (error) {
+        console.log("Error getting Zone of Interest", error)
+        res.status(500).json({error: "Something went wrong"})
+    }
+
+})
+
 app.post("/api/photoOfTheDay", async (req,res) =>{
 
     try {
