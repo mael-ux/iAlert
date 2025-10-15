@@ -1,4 +1,5 @@
 import express from "express";
+import { eq, and } from "drizzle-orm";
 import { ENV } from "./config/env.js";
 import {db} from "./config/db.js";
 import { interestZonesTable } from "./dataBase/schema.js";
@@ -16,7 +17,7 @@ app.get("/api/health", (req,res) =>{
 app.post("/api/interestZone", async (req,res) =>{
 
     try {
-        const {id, userId, zoneId, title, coordinates, createdAt} = req.body;
+        const {userId, zoneId, title, coordinates} = req.body;
     
         if(!userId || !zoneId || !title){
             return res.status(400).json({ error: "Missing required fields"});
@@ -40,24 +41,28 @@ app.post("/api/interestZone", async (req,res) =>{
     }
 });
 
-app.delete("/api/interestZone", async (req, res) => {
+app.delete("/api/interestZone/:userId/:zoneId", async (req, res) => {
     try {
         const {userId, zoneId} = req.params;
+
+        if(!userId || !zoneId){
+            return res.status(400).json({ error: "Missing required parameters"});
+        }
 
         await db
             .delete(interestZonesTable)
             .where(
                 and(eq(interestZonesTable.userId,userId), eq(interestZonesTable.zoneId,parseInt(zoneId))) 
         );
-        res.status(500).json({message: "Zone of Interest removed succesfully"});
-
+        
+      res.status(200).json({message: "Zone of Interest removed succesfully"});
     } catch (error) {
-        console.log("Error deleting Zone of Interest", error)
-        res.status(500).json({error: "Something went wrong"})
+      console.log("Error deleting Zone of Interest:", error.message)
+      res.status(500).json({error: "Something went wrong"})
     }
 });
 
-app.get("/api/interestZone/:userID", async (req, res) =>{
+app.get("/api/interestZone/:userId", async (req, res) =>{
     try {
         const {userId} = req.params;
 
@@ -66,7 +71,7 @@ app.get("/api/interestZone/:userID", async (req, res) =>{
         res.status(200).json(userZoneOfInterest);
 
     } catch (error) {
-        console.log("Error getting Zone of Interest", error)
+        console.log("Error getting Zone of Interest:", error.message)
         res.status(500).json({error: "Something went wrong"})
     }
 
@@ -75,7 +80,7 @@ app.get("/api/interestZone/:userID", async (req, res) =>{
 app.post("/api/photoOfTheDay", async (req,res) =>{
 
     try {
-        const {id, title, credits, image, description, date} = req.body;
+        const {title, credits, image, description} = req.body;
     
         if(!title || !image){
             return res.status(400).json({ error: "Missing required fields"});
@@ -100,4 +105,4 @@ app.post("/api/photoOfTheDay", async (req,res) =>{
 
 app.listen(PORT, () => {
     console.log("Server is running on PORT:", PORT);
-}); 
+});
