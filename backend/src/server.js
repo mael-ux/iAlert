@@ -1,108 +1,112 @@
 import express from "express";
 import { eq, and } from "drizzle-orm";
 import { ENV } from "./config/env.js";
-import {db} from "./config/db.js";
+import { db } from "./config/db.js";
 import { interestZonesTable } from "./dataBase/schema.js";
 import { photoOfTheDay } from "./dataBase/schema.js";
+import job from "./config/cron.js";
 
 const app = express();
 const PORT = ENV.PORT || 8001;
 
+if (ENV.NODE_ENV === "production ")job.start();
+
 app.use(express.json());
 
-app.get("/api/health", (req,res) =>{
-     res.status(200).json({success: true })
-})
+app.get("/api/health", (req, res) => {
+  res.status(200).json({ success: true });
+});
 
-app.post("/api/interestZone", async (req,res) =>{
+app.post("/api/interestZone", async (req, res) => {
+  try {
+    const { userId, zoneId, title, coordinates } = req.body;
 
-    try {
-        const {userId, zoneId, title, coordinates} = req.body;
-    
-        if(!userId || !zoneId || !title){
-            return res.status(400).json({ error: "Missing required fields"});
-        }
-
-        const newZoneOfInterest = await db
-        .insert(interestZonesTable)
-        .values({
-            userId,
-            zoneId,
-            title,
-            coordinates,
-
-    })
-        .returning();
-
-        res.status(201).json(newZoneOfInterest[0])
-    } catch (error) {
-        console.log("Error adding Zone of Interest", error)
-        res.status(500).json({error: "Something went wrong"})
+    if (!userId || !zoneId || !title) {
+      return res.status(400).json({ error: "Missing required fields" });
     }
+
+    const newZoneOfInterest = await db
+      .insert(interestZonesTable)
+      .values({
+        userId,
+        zoneId,
+        title,
+        coordinates,
+      })
+      .returning();
+
+    res.status(201).json(newZoneOfInterest[0]);
+  } catch (error) {
+    console.log("Error adding Zone of Interest", error);
+    res.status(500).json({ error: "Something went wrong" });
+  }
 });
 
 app.delete("/api/interestZone/:userId/:zoneId", async (req, res) => {
-    try {
-        const {userId, zoneId} = req.params;
+  try {
+    const { userId, zoneId } = req.params;
 
-        if(!userId || !zoneId){
-            return res.status(400).json({ error: "Missing required parameters"});
-        }
-
-        await db
-            .delete(interestZonesTable)
-            .where(
-                and(eq(interestZonesTable.userId,userId), eq(interestZonesTable.zoneId,parseInt(zoneId))) 
-        );
-        
-      res.status(200).json({message: "Zone of Interest removed succesfully"});
-    } catch (error) {
-      console.log("Error deleting Zone of Interest:", error.message)
-      res.status(500).json({error: "Something went wrong"})
+    if (!userId || !zoneId) {
+      return res.status(400).json({ error: "Missing required parameters" });
     }
+
+    await db
+      .delete(interestZonesTable)
+      .where(
+        and(
+          eq(interestZonesTable.userId, userId),
+          eq(interestZonesTable.zoneId, parseInt(zoneId)),
+        ),
+      );
+
+    res.status(200).json({ message: "Zone of Interest removed succesfully" });
+  } catch (error) {
+    console.log("Error deleting Zone of Interest:", error.message);
+    res.status(500).json({ error: "Something went wrong" });
+  }
 });
 
-app.get("/api/interestZone/:userId", async (req, res) =>{
-    try {
-        const {userId} = req.params;
+app.get("/api/interestZone/:userId", async (req, res) => {
+  try {
+    const { userId } = req.params;
 
-        const userZoneOfInterest = await db.select().from(interestZonesTable).where(eq(interestZonesTable.userId,userId))
+    const userZoneOfInterest = await db
+      .select()
+      .from(interestZonesTable)
+      .where(eq(interestZonesTable.userId, userId));
 
-        res.status(200).json(userZoneOfInterest);
+    res.status(200).json(userZoneOfInterest);
+  } catch (error) {
+    console.log("Error getting Zone of Interest:", error.message);
+    res.status(500).json({ error: "Something went wrong" });
+  }
+});
 
-    } catch (error) {
-        console.log("Error getting Zone of Interest:", error.message)
-        res.status(500).json({error: "Something went wrong"})
+app.post("/api/photoOfTheDay", async (req, res) => {
+  try {
+    const { title, credits, image, description } = req.body;
+
+    if (!title || !image) {
+      return res.status(400).json({ error: "Missing required fields" });
     }
 
-})
+    const newPhotoOfTheDay = await db
+      .insert(photoOfTheDay)
+      .values({
+        title,
+        credits,
+        image,
+        description,
+      })
+      .returning();
 
-app.post("/api/photoOfTheDay", async (req,res) =>{
-
-    try {
-        const {title, credits, image, description} = req.body;
-    
-        if(!title || !image){
-            return res.status(400).json({ error: "Missing required fields"});
-        }
-
-        const newPhotoOfTheDay = await db
-        .insert(photoOfTheDay)
-        .values({
-                title,
-                credits,
-                image,
-                description,
-    })
-        .returning();
-
-        res.status(201).json(newPhotoOfTheDay[0])
-    } catch (error) {
-        console.log("Error adding Photo of the Day", error)
-        res.status(500).json({error: "Something went wrong"})
-    }
+    res.status(201).json(newPhotoOfTheDay[0]);
+  } catch (error) {
+    console.log("Error adding Photo of the Day", error);
+    res.status(500).json({ error: "Something went wrong" });
+  }
 });
 
 app.listen(PORT, () => {
-    console.log("Server is running on PORT:", PORT);
+  console.log("Server is running on PORT:", PORT);
 });
