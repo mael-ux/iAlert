@@ -1,4 +1,4 @@
-import { pgTable, serial, text, timestamp, integer } from "drizzle-orm/pg-core";
+import { pgTable, serial, text, timestamp, integer, date } from "drizzle-orm/pg-core";
 
 export const interestZonesTable = pgTable("interest_zone", {
   id: serial("id").primaryKey(),
@@ -19,5 +19,5 @@ export const photoOfTheDay = pgTable("photo_of_the_day", {
   credits: text("credits"),
   image: text("image").notNull(),
   description: text("description"),
-  date: timestamp("date").defaultNow(),
+  date: date("date").notNull(), 
 });
