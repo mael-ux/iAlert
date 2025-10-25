@@ -4,12 +4,17 @@ import { ENV } from "./config/env.js";
 import { db } from "./config/db.js";
 import { interestZonesTable } from "./dataBase/schema.js";
 import { photoOfTheDay } from "./dataBase/schema.js";
-import job from "./config/cron.js";
+import healthCheckJob from "./config/cron.js";
+import photoJob from "./config/cron.js";
+import https from "https";
 
 const app = express();
 const PORT = ENV.PORT || 8001;
 
-if (ENV.NODE_ENV === "production ")job.start();
+if (ENV.NODE_ENV === "production") {
+  healthCheckJob.start();
+  photoJob.start();
+}
 
 app.use(express.json());
 
@@ -109,4 +114,63 @@ app.post("/api/photoOfTheDay", async (req, res) => {
 
 app.listen(PORT, () => {
   console.log("Server is running on PORT:", PORT);
+});
+const fetchAndInsertPhoto = async () => {
+  try {
+    const response = await fetch(process.env.NASA_API);
+    const text = await response.text();
+
+    if (!response.ok) {
+      throw new Error(`NASA API request failed: ${response.status} ${text}`);
+    }
+
+    if (!text || text.trim() === "") {
+      throw new Error("NASA API returned empty response");
+    }
+
+    let photo;
+    try {
+      photo = JSON.parse(text);
+    } catch (err) {
+      throw new Error(`Failed to parse NASA API response: ${text}`);
+    }
+
+    if (!photo.title || !photo.url) {
+      throw new Error("Invalid photo data from NASA API");
+    }
+
+    // Insert into DB
+    await db.insert(schema.photoOfTheDay).values({
+      title: photo.title,
+      credits: photo.copyright || "Unknown",
+      image: photo.url,
+      description: photo.explanation || "",
+    });
+
+    // Keep only last 30 entries
+    const countResult = await db.select({ count: sql`count(*)` }).from(schema.photoOfTheDay);
+    const total = parseInt(countResult[0].count, 10);
+
+    if (total > 30) {
+      const rowsToDelete = total - 30;
+      await db
+        .delete(schema.photoOfTheDay)
+        .where(sql`id IN (SELECT id FROM photo_of_the_day ORDER BY date ASC LIMIT ${rowsToDelete})`);
+    }
+
+    return photo;
+  } catch (err) {
+    console.error("fetchAndInsertPhoto error:", err);
+    throw err;
+  }
+};
+
+// Manual endpoint to test via Postman
+app.get("/api/fetch-photo", async (req, res) => {
+  try {
+    const photo = await fetchAndInsertPhoto();
+    res.status(200).json({ success: true, photo });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
 });
