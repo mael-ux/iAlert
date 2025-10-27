@@ -13,12 +13,15 @@
   "dependencies": {
     "@clerk/clerk-expo": "^2.17.1",
     "@expo/vector-icons": "^15.0.3",
+    "@react-native-async-storage/async-storage": "2.2.0",
     "@react-navigation/bottom-tabs": "^7.4.0",
     "@react-navigation/elements": "^2.6.3",
     "@react-navigation/native": "^7.1.8",
     "expo": "54.0.20",
+    "expo-asset": "~12.0.9",
     "expo-auth-session": "~7.0.8",
     "expo-constants": "~18.0.10",
+    "expo-file-system": "~19.0.17",
     "expo-font": "~14.0.9",
     "expo-haptics": "~15.0.7",
     "expo-image": "~3.0.10",
@@ -38,7 +41,10 @@
     "react-native-safe-area-context": "~5.6.0",
     "react-native-screens": "~4.16.0",
     "react-native-web": "~0.21.0",
-    "react-native-worklets": "0.5.1"
+    "react-native-webview": "13.15.0",
+    "react-native-worklets": "0.5.1",
+    "three": "^0.180.0",
+    "three-globe": "^2.44.1"
   },
   "devDependencies": {
     "@types/react": "~19.1.0",

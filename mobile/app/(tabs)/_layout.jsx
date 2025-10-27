@@ -1,17 +1,19 @@
+import { Tabs, Redirect } from "expo-router";
 import { useAuth } from "@clerk/clerk-expo";
-import { Redirect, Tabs } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { COLORS } from "../../constants/colors";
 
-const TabsLayout = () => {
+export default function TabsLayout() {
   const { isSignedIn, isLoaded } = useAuth();
 
   if (!isLoaded) return null;
 
-  if (!isSignedIn) return <Redirect href={"/(auth)/sign-in"} />;
+  // If not signed in, go to auth
+  if (!isSignedIn) return <Redirect href="/(auth)/sign-in" />;
 
   return (
     <Tabs
+      initialRouteName="index"
       screenOptions={{
         headerShown: false,
         tabBarActiveTintColor: COLORS.primary,
@@ -24,34 +26,36 @@ const TabsLayout = () => {
           paddingTop: 8,
           height: 80,
         },
-        tabBarLabelStyle: {
-          fontSize: 12,
-          fontWeight: "600",
-        },
+        tabBarLabelStyle: { fontSize: 12, fontWeight: "600" },
       }}
     >
       <Tabs.Screen
+        name="weather"
+        options={{
+          title: "Weather",
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="cloud-outline" size={size} color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
         name="index"
         options={{
-          title: "Recipes",
-          tabBarIcon: ({ color, size }) => <Ionicons name="restaurant" size={size} color={color} />,
+          title: "Globe",
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="globe-outline" size={size} color={color} />
+          ),
         }}
       />
       <Tabs.Screen
-        name="search"
+        name="user"
         options={{
-          title: "Search",
-          tabBarIcon: ({ color, size }) => <Ionicons name="search" size={size} color={color} />,
-        }}
-      />
-      <Tabs.Screen
-        name="favorites"
-        options={{
-          title: "Favorites",
-          tabBarIcon: ({ color, size }) => <Ionicons name="heart" size={size} color={color} />,
+          title: "User",
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="person-outline" size={size} color={color} />
+          ),
         }}
       />
     </Tabs>
   );
-};
-export default TabsLayout;
+}

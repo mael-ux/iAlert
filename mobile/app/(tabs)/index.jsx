@@ -1,62 +1,39 @@
 import React from "react";
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
+import { View, Text, StyleSheet } from "react-native";
+import { COLORS } from "../../constants/colors";
 
-const HomeScreen = () => {
+// 1. FIX: Capitalized component name and corrected relative path
+import GlobeMap from "../components/globeMap";
+
+export default function GlobeScreen() {
   return (
-    <ScrollView contentContainerStyle={styles.container}>
-      <Text style={styles.title}>Welcome Home 👋</Text>
-      <Text style={styles.subtitle}>This is your home screen</Text>
+    // 2. FIX: Used your container style to center the map
+    <View style={styles.container}>
+      {/* You can add a title here if you want */}
+      {/* <Text style={styles.title}>Globe</Text> */}
 
-      <View style={styles.iconRow}>
-        <Ionicons name="home-outline" size={48} color="#4F46E5" />
-        <Ionicons name="person-outline" size={48} color="#4F46E5" />
-        <Ionicons name="settings-outline" size={48} color="#4F46E5" />
+      {/* 3. FIX: Container for the map */}
+      <View style={{ height: 400, width: "100%", marginTop: 20 }}>
+        <GlobeMap style={{ flex: 1 }} /> 
       </View>
-
-      <TouchableOpacity style={styles.button}>
-        <Text style={styles.buttonText}>Get Started</Text>
-      </TouchableOpacity>
-    </ScrollView>
+    </View>
   );
-};
-
-export default HomeScreen;
+}
 
 const styles = StyleSheet.create({
   container: {
-    flexGrow: 1,
-    justifyContent: "center",
+    flex: 1,
     alignItems: "center",
-    paddingVertical: 60,
-    backgroundColor: "#F9FAFB",
+    padding: 24,
+    backgroundColor: '#000', 
   },
   title: {
-    fontSize: 28,
-    fontWeight: "700",
-    color: "#111827",
-    marginBottom: 8,
+    fontSize: 24,
+    fontWeight: "bold",
+    color: '#fff', 
   },
   subtitle: {
     fontSize: 16,
-    color: "#6B7280",
-    marginBottom: 40,
-  },
-  iconRow: {
-    flexDirection: "row",
-    justifyContent: "space-around",
-    width: "80%",
-    marginBottom: 50,
-  },
-  button: {
-    backgroundColor: "#4F46E5",
-    paddingVertical: 14,
-    paddingHorizontal: 40,
-    borderRadius: 12,
-  },
-  buttonText: {
-    color: "#FFF",
-    fontSize: 16,
-    fontWeight: "600",
+    color: '#999', 
   },
 });
