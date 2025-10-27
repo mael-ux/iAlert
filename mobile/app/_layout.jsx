@@ -1,21 +1,15 @@
 import { Slot } from "expo-router";
+import React from "react";
 import { ClerkProvider } from "@clerk/clerk-expo";
 import { tokenCache } from "@clerk/clerk-expo/token-cache";
-import { View, SafeAreaView, StyleSheet } from "react-native";
 
 export default function RootLayout() {
   return (
-    <ClerkProvider tokenCache={tokenCache}>
-      <SafeAreaView style={styles.container}>
-        <Slot />
-      </SafeAreaView>
+    <ClerkProvider
+      publishableKey={process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY}
+      tokenCache={tokenCache}
+    >
+      <Slot />
     </ClerkProvider>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: "#fff",
-  },
-});

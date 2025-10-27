@@ -6,7 +6,7 @@ import { interestZonesTable } from "./dataBase/schema.js";
 import { photoOfTheDay } from "./dataBase/schema.js";
 import healthCheckJob from "./config/cron.js";
 import photoJob from "./config/cron.js";
-import https from "https";
+import fetch from "node-fetch"; 
 
 const app = express();
 const PORT = ENV.PORT || 8001;
@@ -112,65 +112,32 @@ app.post("/api/photoOfTheDay", async (req, res) => {
   }
 });
 
-app.listen(PORT, () => {
-  console.log("Server is running on PORT:", PORT);
-});
+// 🔥 Manual test route for now
 const fetchAndInsertPhoto = async () => {
-  try {
-    const response = await fetch(process.env.NASA_API);
-    const text = await response.text();
+  const res = await fetch("https://picsum.photos/800/600");
+  const image = res.url;
 
-    if (!response.ok) {
-      throw new Error(`NASA API request failed: ${response.status} ${text}`);
-    }
+  const photo = {
+    title: "Temporary Photo of the Day",
+    credits: "Lorem Picsum",
+    image,
+    description: "Mock image used while NASA API is offline",
+  };
 
-    if (!text || text.trim() === "") {
-      throw new Error("NASA API returned empty response");
-    }
-
-    let photo;
-    try {
-      photo = JSON.parse(text);
-    } catch (err) {
-      throw new Error(`Failed to parse NASA API response: ${text}`);
-    }
-
-    if (!photo.title || !photo.url) {
-      throw new Error("Invalid photo data from NASA API");
-    }
-
-    // Insert into DB
-    await db.insert(schema.photoOfTheDay).values({
-      title: photo.title,
-      credits: photo.copyright || "Unknown",
-      image: photo.url,
-      description: photo.explanation || "",
-    });
-
-    // Keep only last 30 entries
-    const countResult = await db.select({ count: sql`count(*)` }).from(schema.photoOfTheDay);
-    const total = parseInt(countResult[0].count, 10);
-
-    if (total > 30) {
-      const rowsToDelete = total - 30;
-      await db
-        .delete(schema.photoOfTheDay)
-        .where(sql`id IN (SELECT id FROM photo_of_the_day ORDER BY date ASC LIMIT ${rowsToDelete})`);
-    }
-
-    return photo;
-  } catch (err) {
-    console.error("fetchAndInsertPhoto error:", err);
-    throw err;
-  }
+  await db.insert(photoOfTheDay).values(photo);
+  return photo;
 };
 
-// Manual endpoint to test via Postman
 app.get("/api/fetch-photo", async (req, res) => {
   try {
     const photo = await fetchAndInsertPhoto();
     res.status(200).json({ success: true, photo });
   } catch (err) {
+    console.error("Error fetching photo:", err);
     res.status(500).json({ success: false, error: err.message });
   }
+});
+
+app.listen(PORT, () => {
+  console.log("Server is running on PORT:", PORT);
 });
