@@ -1,6 +1,8 @@
 import React from "react";
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import Mapa3D from "../../components/Mapa3D";
+
 
 const HomeScreen = () => {
   return (
@@ -17,6 +19,9 @@ const HomeScreen = () => {
       <TouchableOpacity style={styles.button}>
         <Text style={styles.buttonText}>Get Started</Text>
       </TouchableOpacity>
+      <View style={{ height: 400, width: "100%", marginTop: 20 }}>
+        <Mapa3D /> 
+      </View>
     </ScrollView>
   );
 };

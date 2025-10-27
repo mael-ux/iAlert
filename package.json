@@ -1,0 +1,14 @@
+{
+  "dependencies": {
+    "expo": "^54.0.20",
+    "globe.gl": "^2.44.1",
+    "go": "^3.0.1",
+    "react": "19.1.0",
+    "react-native": "0.81.5",
+    "three": "^0.180.0"
+  },
+  "devDependencies": {
+    "@types/react": "~19.1.10",
+    "typescript": "~5.9.2"
+  }
+}
