@@ -2,10 +2,9 @@ import React, { useState, useEffect } from "react";
 import { View, StyleSheet, ActivityIndicator } from "react-native";
 import { WebView } from "react-native-webview";
 import { Asset } from "expo-asset";
-import * as FileSystem from "expo-file-system/legacy"; // Using legacy as we discussed
+import * as FileSystem from "expo-file-system/legacy"; 
 import { COLORS } from "../../constants/colors";
 
-// These paths are correct
 const threeJsAsset = require("../../assets/js/three.txt");
 const threeGlobeAsset = require("../../assets/js/three-globe.txt");
 
@@ -27,8 +26,6 @@ export default function GlobeMap({ points = null, style }) {
         const threeJsCode = await FileSystem.readAsStringAsync(threeJsLocalUri);
         const threeGlobeCode = await FileSystem.readAsStringAsync(threeGlobeLocalUri);
 
-        // --- THIS IS THE NEW, CORRECT HTML ---
-        // It builds a full Three.js scene to host the globe object
         const html = `
           <!DOCTYPE html>
           <html>

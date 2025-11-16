@@ -1,0 +1,4 @@
+// Replace this with your computer's IP address
+const YOUR_COMPUTER_IP = ""; 
+
+export const API_URL = `http://${YOUR_COMPUTER_IP}:5001/api`;

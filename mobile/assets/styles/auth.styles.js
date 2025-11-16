@@ -15,23 +15,26 @@ export const authStyles = StyleSheet.create({
     flexGrow: 1,
     paddingHorizontal: 24,
     paddingTop: 40,
+    paddingBottom: 40,        
+    justifyContent: 'center',
   },
   imageContainer: {
-    height: height * 0.3,
-    marginBottom: 30,
+    
+    height: "auto", 
+    marginBottom: 20,
     justifyContent: "center",
     alignItems: "center",
   },
   image: {
-    width: 320,
-    height: 320,
+    width: 150, 
+    height: 150, 
   },
   title: {
     fontSize: 28,
     fontWeight: "bold",
     color: COLORS.text,
     textAlign: "center",
-    marginBottom: 40,
+    marginBottom: 30, 
   },
   subtitle: {
     fontSize: 16,
@@ -40,7 +43,7 @@ export const authStyles = StyleSheet.create({
     marginBottom: 30,
   },
   formContainer: {
-    flex: 1,
+  
   },
   inputContainer: {
     marginBottom: 20,
@@ -67,7 +70,6 @@ export const authStyles = StyleSheet.create({
     paddingVertical: 18,
     borderRadius: 12,
     marginTop: 20,
-    marginBottom: 30,
   },
   buttonDisabled: {
     opacity: 0.7,
@@ -81,6 +83,7 @@ export const authStyles = StyleSheet.create({
   linkContainer: {
     alignItems: "center",
     paddingBottom: 20,
+    marginTop: 30,
   },
   linkText: {
     fontSize: 16,
@@ -89,5 +92,42 @@ export const authStyles = StyleSheet.create({
   link: {
     color: COLORS.primary,
     fontWeight: "600",
+  },
+  socialContainer: {
+    marginTop: 16,
+    gap: 12, 
+  },
+  socialButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 16,
+    borderRadius: 30,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  socialIcon: {
+    width: 24,
+    height: 24,
+    marginRight: 12,
+  },
+  socialButtonText: {
+    fontSize: 16,
+    fontWeight: "500",
+  },
+  dividerContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginVertical: 30, 
+  },
+  dividerLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: COLORS.border,
+  },
+  dividerText: {
+    marginHorizontal: 12,
+    fontSize: 14,
+    color: COLORS.textLight,
   },
 });
