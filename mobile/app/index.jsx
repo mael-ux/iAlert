@@ -1,73 +1,71 @@
 import { useRouter, Redirect } from "expo-router";
-import { Pressable, View, Text, ActivityIndicator, StyleSheet, Dimensions } from "react-native";
+import { Pressable, View, Text, ActivityIndicator, StyleSheet, Dimensions, StatusBar } from "react-native";
 import { useEffect, useState } from "react";
 import { Image } from "expo-image";
-import { useAuth } from "@clerk/clerk-expo"; // Import Clerk's useAuth hook
+import { useAuth } from "@clerk/clerk-expo"; 
 import { COLORS } from "../constants/colors";
+import { API_URL } from "../constants/api";
 
 const { width, height } = Dimensions.get("window");
 
 const errorPlaceholder = require('../assets/images/placeholder.png'); 
 
+// Static fallback APOD data for when the API is down
+const FALLBACK_APOD = {
+  title: "Horsehead Nebula",
+  url: "https://apod.nasa.gov/apod/image/2301/Horsehead_Hubble_1225.jpg",
+  explanation: "The Horsehead Nebula is one of the most identifiable nebulae in the sky, located in the constellation Orion. This iconic shape is sculpted from dense clouds of molecular gas and dust.",
+  copyright: "NASA, ESA, Hubble Heritage Team"
+};
+
 export default function PhotoOfTheDay() {
   const router = useRouter();
-  const { isSignedIn, isLoaded } = useAuth(); // Get auth state from Clerk
+  // We still need these hooks to know *when* to fetch data
+  const { isSignedIn, isLoaded } = useAuth(); 
 
-  // We need two loading states:
-  // 1. dataLoading: for fetching your photo from Neon
-  // 2. isLoaded: from Clerk, for checking auth status
   const [dataLoading, setDataLoading] = useState(true);
   const [apodData, setApodData] = useState(null);
   const [error, setError] = useState(false);
 
   useEffect(() => {
-    // Only fetch data if the user is signed in
-    if (isSignedIn) {
+    // Only fetch data if Clerk is loaded AND the user is signed in
+    if (isLoaded && isSignedIn) {
       const fetchApodFromMyDb = async () => {
         try {
-          // --- IMPORTANT: Change this to YOUR backend API endpoint ---
-          const response = await fetch('https://your-backend.com/api/apod');
+          const response = await fetch(`${API_URL}/photoOfTheDay`);
           
           if (!response.ok) {
             throw new Error('Failed to fetch from DB');
           }
           
           const data = await response.json();
-          // Assuming data is { url, title, description }
           setApodData(data); 
 
         } catch (err) {
           console.error("Error fetching APOD:", err);
-          setError(true); // Set error state
+          console.log("Using fallback APOD data");
+          // Use fallback data instead of showing error
+          setApodData(FALLBACK_APOD);
         } finally {
-          setDataLoading(false); // Stop data loading
+          setDataLoading(false);
         }
       };
 
       fetchApodFromMyDb();
+    } else if (isLoaded) {
+      // If Clerk is loaded but user is not signed in,
+      // the _layout.jsx will handle the redirect.
+      // We don't need to do anything here.
+      setDataLoading(false); // Stop loading, as there's nothing to fetch
     }
-  }, [isSignedIn]); // Re-run if isSignedIn changes
+  }, [isLoaded, isSignedIn]); // Re-run when these change
 
   const handleContinue = () => {
-    router.replace("/(tabs)"); // go to tabs
+    router.replace("/(tabs)"); 
   };
 
-  // --- 1. Wait for Clerk to load ---
-  if (!isLoaded) {
-    return (
-      <View style={styles.center}>
-        <ActivityIndicator size="large" color={COLORS.primary} />
-      </View>
-    );
-  }
-
-  // --- 2. If Clerk is loaded and user is NOT signed in, redirect ---
-  if (!isSignedIn) {
-    return <Redirect href="/(auth)/sign-in" />;
-  }
-
-  // --- 3. If Clerk is loaded AND user IS signed in, show the screen ---
-  // Show loading indicator while fetching from your DB
+  // --- This is the new, simpler loading state ---
+  // The _layout.jsx handles the main Clerk loading
   if (dataLoading) {
     return (
       <View style={styles.center}>
@@ -76,21 +74,22 @@ export default function PhotoOfTheDay() {
     );
   }
 
-  // --- 4. Data is loaded (or failed), show the pressable screen ---
-  
-  // Decide what image to show:
-  // - If error: show placeholder
-  // - If success: show the URL from your database
-  const imageSource = (error || !apodData) 
+  // --- This redirect logic was REMOVED ---
+  // The _layout.jsx is now responsible for this
+  // if (!isLoaded) { ... }
+  // if (!isSignedIn) { ... }
+
+  const imageSource = !apodData 
     ? errorPlaceholder 
     : { uri: apodData.url };
 
-  const title = (error || !apodData)
+  const title = !apodData
     ? "Could not load photo"
     : apodData.title;
 
   return (
     <Pressable style={styles.container} onPress={handleContinue}>
+      <StatusBar hidden />
       <Image 
         source={imageSource} 
         style={styles.image} 
@@ -106,9 +105,9 @@ export default function PhotoOfTheDay() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.black },
-  image: { width, height: height * 0.72 },
-  footer: { padding: 16, backgroundColor: COLORS.white, flex: 1, alignItems: "center", justifyContent: "flex-start" },
+  image: { width, height: height * 0.75 },
+  footer: { padding: 16, backgroundColor: COLORS.background, flex: 1, alignItems: "center", justifyContent: "flex-start" },
   title: { fontSize: 20, fontWeight: "700", marginBottom: 6, textAlign: "center", color: COLORS.primary },
   prompt: { marginTop: 10, color: COLORS.primary, fontWeight: "600" },
-  center: { flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: COLORS.white },
+  center: { flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: COLORS.background },
 });

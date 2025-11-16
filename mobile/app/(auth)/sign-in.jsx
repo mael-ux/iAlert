@@ -1,4 +1,4 @@
-import { useSignIn } from "@clerk/clerk-expo";
+import { useSignIn, useOAuth } from "@clerk/clerk-expo"; // <-- Import useOAuth
 import { useRouter } from "expo-router";
 import { useState } from "react";
 import {
@@ -6,22 +6,52 @@ import {
   Text,
   Alert,
   KeyboardAvoidingView,
-  Platform,
+  Platform, // <-- Import Platform
   ScrollView,
   TextInput,
   TouchableOpacity,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-
 import { Image } from "expo-image";
+import * as WebBrowser from "expo-web-browser"; // <-- Import WebBrowser
 
 import { authStyles } from "../../assets/styles/auth.styles";
 import { COLORS } from "../../constants/colors";
+
+// This is required for Apple Sign In to work on iOS
+WebBrowser.maybeCompleteAuthSession();
 
 const SignInScreen = () => {
   const router = useRouter();
 
   const { signIn, setActive, isLoaded } = useSignIn();
+
+  // --- OAuth Setup ---
+  const { startOAuthFlow: startGoogleOAuth } = useOAuth({ strategy: "oauth_google" });
+  const { startOAuthFlow: startAppleOAuth } = useOAuth({ strategy: "oauth_apple" });
+
+  const onSocialSignIn = async (provider) => {
+    if (!isLoaded) return;
+
+    try {
+      const startAuth = provider === 'google' ? startGoogleOAuth : startAppleOAuth;
+      // Note: For sign-in, we just need the session.
+      const { createdSessionId, setActive } = await startAuth();
+
+      if (createdSessionId) {
+        // If successful, sign the user in
+        setActive({ session: createdSessionId });
+        router.replace("/"); // Navigate to your main app (POTD screen)
+      } else {
+        // This can happen if the user needs to complete profile info
+        console.log("OAuth flow started, but no session created.");
+      }
+    } catch (err) {
+      console.error("OAuth error", JSON.stringify(err, null, 2));
+      Alert.alert("Error", err.errors?.[0]?.message || "Failed to sign in with social account");
+    }
+  };
+  // --- End of OAuth Setup ---
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -67,6 +97,7 @@ const SignInScreen = () => {
         keyboardVerticalOffset={Platform.OS === "ios" ? 64 : 0}
       >
         <ScrollView
+          scrollEnabled={false}
           contentContainerStyle={authStyles.scrollContent}
           showsVerticalScrollIndicator={false}
         >
@@ -80,7 +111,7 @@ const SignInScreen = () => {
 
           <Text style={authStyles.title}>Welcome Back</Text>
 
-          {/* FORM CONTAINER */}
+          {/* --- THIS BLOCK MOVED UP --- */}
           <View style={authStyles.formContainer}>
             {/* Email Input */}
             <View style={authStyles.inputContainer}>
@@ -126,17 +157,57 @@ const SignInScreen = () => {
             >
               <Text style={authStyles.buttonText}>{loading ? "Signing In..." : "Sign In"}</Text>
             </TouchableOpacity>
+          </View>
 
-            {/* Sign Up Link */}
+          {/* --- DIVIDER MOVED DOWN --- */}
+          <View style={authStyles.dividerContainer}>
+            <View style={authStyles.dividerLine} />
+            <Text style={authStyles.dividerText}>OR</Text>
+            <View style={authStyles.dividerLine} />
+          </View>
+
+          {/* --- SOCIAL BUTTONS MOVED DOWN --- */}
+          <View style={authStyles.socialContainer}>
             <TouchableOpacity
-              style={authStyles.linkContainer}
-              onPress={() => router.push("/(auth)/sign-up")}
+              style={[authStyles.socialButton, { backgroundColor: COLORS.white }]}
+              onPress={() => onSocialSignIn('google')}
             >
-              <Text style={authStyles.linkText}>
-                Don&apos;t have an account? <Text style={authStyles.link}>Sign up</Text>
+              <Image 
+                source={require("../../assets/images/google.png")} 
+                style={authStyles.socialIcon}
+              />
+              <Text style={[authStyles.socialButtonText, { color: '#000' }]}>
+                Sign in with Google
               </Text>
             </TouchableOpacity>
+            
+            {Platform.OS === 'ios' && (
+              <TouchableOpacity
+                style={[authStyles.socialButton, { backgroundColor: '#000' }]} 
+                onPress={() => onSocialSignIn('apple')}
+              >
+                <Image
+                  source={require("../../assets/images/Apple-Logo.png")} 
+                  style={authStyles.socialIcon}
+                  tintColor="#fff" 
+                />
+                <Text style={[authStyles.socialButtonText, { color: '#fff' }]}>
+                  Sign in with Apple
+                </Text>
+              </TouchableOpacity>
+            )}
           </View>
+
+          {/* --- SIGN UP LINK STAYS AT THE BOTTOM --- */}
+          <TouchableOpacity
+            style={authStyles.linkContainer}
+            onPress={() => router.push("/(auth)/sign-up")}
+          >
+            <Text style={authStyles.linkText}>
+              Don&apos;t have an account? <Text style={authStyles.link}>Sign up</Text>
+            </Text>
+          </TouchableOpacity>
+
         </ScrollView>
       </KeyboardAvoidingView>
     </View>

@@ -2,12 +2,11 @@ import React from "react";
 import { View, Text, StyleSheet } from "react-native";
 import { COLORS } from "../../constants/colors";
 
-// 1. FIX: Capitalized component name and corrected relative path
 import GlobeMap from "../components/globeMap";
 
 export default function GlobeScreen() {
   return (
-    // 2. FIX: Used your container style to center the map
+    
     <View style={styles.container}>
       {/* You can add a title here if you want */}
       {/* <Text style={styles.title}>Globe</Text> */}
