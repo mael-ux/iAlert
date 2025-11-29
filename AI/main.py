@@ -146,7 +146,7 @@ async def health_check():
 
 # Get countries by continent
 @app.get("/api/countries/{continent}")
-async def get_countries(continent: str) -> Dict[str, List[str]]:
+async def get_countries(continent: str):
     """
     Get list of countries for a given continent
     
@@ -154,7 +154,7 @@ async def get_countries(continent: str) -> Dict[str, List[str]]:
         continent: One of Asia, Europe, Africa, America, Oceania
     
     Returns:
-        Dictionary with list of countries
+        Dictionary with continent name (string) and list of countries
     """
     # Normalize continent name (capitalize first letter)
     continent = continent.capitalize()
