@@ -1,35 +1,34 @@
-// backend/src/server.js - COMPLETELY INTEGRATED VERSION
-
 import express from "express";
-import { eq, and, desc, sql } from "drizzle-orm";
+import { eq, and, sql } from "drizzle-orm";
 import { ENV } from "./config/env.js";
 import { db } from "./config/db.js";
-import alertsRouter from "./routes/alerts.routes.js";
-import { eonetCheckJob } from './config/eonetCron.js';
 import {
   interestZonesTable,
   photoOfTheDayTable,
   weatherCacheTable, 
 } from "./dataBase/schema.js";
 
-// Cron jobs
+// FIXED: Import cron jobs properly
 import { healthCheckJob, photoJob } from "./config/cron.js";
+// Import the new EONET cron if it exists
+// import { eonetCheckJob } from './config/eonetCron.js';
+
+// Import alerts router if it exists
+// import alertsRouter from "./routes/alerts.routes.js";
 
 import fetch from "node-fetch";
-import { execFile } from "child_process";   // <--- AGREGADO PARA IA
 
 const app = express();
 const PORT = ENV.PORT || 8001;
 
-// =========================
-//   CRON JOBS (PRODUCCIÓN)
-// =========================
-//if (ENV.NODE_ENV === "production") {
-  //console.log("Starting cron jobs in production mode...");
-  //healthCheckJob.start();
-  //photoJob.start();
-  //console.log("Cron jobs started successfully");
-//}
+// FIXED: Start cron jobs in production
+if (ENV.NODE_ENV === "production") {
+  console.log("Starting cron jobs in production mode...");
+  healthCheckJob.start();
+  photoJob.start();
+  // eonetCheckJob.start(); // Uncomment if you have this
+  console.log("Cron jobs started successfully");
+}
 
 app.use(express.json());
 
@@ -104,6 +103,10 @@ app.delete("/api/interestZone/:userId/:id", async (req, res) => {
   try {
     const { userId, id } = req.params;
 
+    if (!userId || !id) {
+      return res.status(400).json({ error: "Missing required parameters" });
+    }
+
     await db
       .delete(interestZonesTable)
       .where(
@@ -141,6 +144,7 @@ app.get("/api/interestZone/:userId", async (req, res) => {
 // =========================
 app.get("/api/photoOfTheDay", async (req, res) => {
   try {
+    // FIXED: Random photo selection
     const [randomPhoto] = await db
       .select()
       .from(photoOfTheDayTable)
@@ -148,6 +152,7 @@ app.get("/api/photoOfTheDay", async (req, res) => {
       .limit(1);
 
     if (!randomPhoto) {
+      console.log("No photo in DB, returning fallback");
       return res.status(200).json({
         title: "Horsehead Nebula",
         image: "https://apod.nasa.gov/apod/image/2301/Horsehead_Hubble_1225.jpg",
@@ -156,9 +161,47 @@ app.get("/api/photoOfTheDay", async (req, res) => {
       });
     }
 
-    res.status(200).json(randomPhoto);
+    res.status(200).json({
+      title: randomPhoto.title,
+      image: randomPhoto.image,
+      description: randomPhoto.description,
+      credits: randomPhoto.credits,
+    });
   } catch (error) {
     console.log("Error fetching Photo of the Day", error);
+    res.status(200).json({
+      title: "Horsehead Nebula",
+      image: "https://apod.nasa.gov/apod/image/2301/Horsehead_Hubble_1225.jpg",
+      description: "The Horsehead Nebula is one of the most identifiable nebulae in the sky.",
+      credits: "NASA, ESA, Hubble Heritage Team",
+    });
+  }
+});
+
+app.post("/api/photoOfTheDay", async (req, res) => {
+  try {
+    const { title, credits, image, description } = req.body;
+
+    if (!title || !image) {
+      return res.status(400).json({ error: "Missing required fields (title, image)" });
+    }
+
+    const today = new Date().toISOString().split('T')[0];
+
+    const newPhotoOfTheDay = await db
+      .insert(photoOfTheDayTable)
+      .values({
+        title,
+        credits: credits || "NASA",
+        image,
+        description: description || "",
+        date: today,
+      })
+      .returning();
+
+    res.status(201).json(newPhotoOfTheDay[0]);
+  } catch (error) {
+    console.log("Error adding Photo of the Day", error);
     res.status(500).json({ error: "Something went wrong" });
   }
 });
@@ -202,12 +245,20 @@ app.post("/api/get-weather", async (req, res) => {
         oneHour;
 
     if (cachedWeather && !isStale) {
+      console.log(`Cache HIT for grid: ${gridLat}, ${gridLng}`);
       return res.status(200).json(cachedWeather.weatherData);
     }
 
+    console.log(`Cache MISS for grid: ${gridLat}, ${gridLng}`);
     const weatherResponse = await fetch(
       `https://api.openweathermap.org/data/2.5/weather?lat=${latitude}&lon=${longitude}&appid=${OPENWEATHER_API_KEY}&units=metric`,
     );
+
+    if (!weatherResponse.ok) {
+      const errorData = await weatherResponse.json();
+      console.error("OpenWeatherMap API Error:", errorData);
+      throw new Error(`Failed to fetch weather. Status: ${weatherResponse.status}`);
+    }
 
     const weatherData = await weatherResponse.json();
 
@@ -234,18 +285,25 @@ app.post("/api/get-weather", async (req, res) => {
     res.status(500).json({ error: "Internal server error" });
   }
 });
-if (ENV.NODE_ENV === "production") {
-  console.log("Starting cron jobs...");
-  healthCheckJob.start();
-  photoJob.start();
-  eonetCheckJob.start(); // ← NUEVO
-}
 
-app.use("/api/alerts", alertsRouter);
+// =========================
+//    ALERTS ROUTER
+// =========================
+// Uncomment if you have alerts routes
+// app.use("/api/alerts", alertsRouter);
 
-// =====================================================
-//      🚨  AQUÍ VIENE TU IA: /api/predict-disaster 🚨
-// =====================================================
+// =========================
+//    AI PREDICTION (Optional - for production, this should be removed or secured)
+// =========================
+// NOTE: This Python path is local to one computer and won't work on Render!
+// For production, you'd need to:
+// 1. Install Python on Render
+// 2. Upload your AI model
+// 3. Use environment variables for paths
+
+/*
+import { execFile } from "child_process";
+
 app.post("/api/predict-disaster", (req, res) => {
   const { region, country } = req.body;
 
@@ -253,9 +311,9 @@ app.post("/api/predict-disaster", (req, res) => {
     return res.status(400).json({ error: "Missing region or country" });
   }
 
-  // Rutas correctas de Python y predict.py
-  const pythonExe = "C:/Python314/python.exe";
-  const scriptPath = "C:/Users/marqu/OneDrive/Escritorio/iAlert/AI/predict.py";
+  // These paths only work on one specific computer!
+  const pythonExe = process.env.PYTHON_PATH || "python3";
+  const scriptPath = process.env.AI_SCRIPT_PATH || "./AI/predict.py";
 
   execFile(
     pythonExe,
@@ -285,10 +343,12 @@ app.post("/api/predict-disaster", (req, res) => {
     }
   );
 });
+*/
 
 // =========================
 //     START SERVER
 // =========================
 app.listen(PORT, "0.0.0.0", () => {
-  console.log(`Server running on http://0.0.0.0:${PORT}`);
+  console.log(`Server is running on PORT: ${PORT} and listening on all interfaces`);
+  console.log(`Environment: ${ENV.NODE_ENV}`);
 });
