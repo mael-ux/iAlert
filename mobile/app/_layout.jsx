@@ -5,7 +5,7 @@ import { Slot, useRouter } from "expo-router";
 import * as SecureStore from "expo-secure-store";
 import { View, ActivityIndicator } from "react-native";
 import { useAuth } from "@clerk/clerk-expo";
-import { useAlertPolling } from "./hooks/useAlertPolling"; // ← NUEVO
+import { useAlertPolling } from "./hooks/useAlertPolling"; 
 
 const tokenCache = {
   async getToken(key) {
