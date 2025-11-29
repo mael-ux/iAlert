@@ -171,7 +171,9 @@ def predecir_desastres_usuario(pipeline, label_encoder):
 
 # --- Ejecución Principal ---
 # Nombre del archivo Excel
-nombre_archivo = r"C:\Users\marqu\OneDrive\Escritorio\iAlert\AI\public_emdat_custom_request_2025-10-26_4a89000d-cedd-4bd7-b279-71aa2a2f6035.xlsx"
+
+nombre_archivo = "public_emdat_custom_request_2025-10-26_4a89000d-cedd-4bd7-b279-71aa2a2f6035.xlsx"
+
 
 # Cargar el DataFrame global para los ejemplos (solo lectura)
 try:
