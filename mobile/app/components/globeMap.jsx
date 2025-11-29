@@ -1,41 +1,12 @@
-// mobile/app/components/globeMap.jsx - FIXED VERSION
+// mobile/app/components/globeMap.jsx - WORKING VERSION
+// Fetches disasters from YOUR backend (which proxies EONET)
 import React, { useState, useEffect } from "react";
-import { View, StyleSheet, ActivityIndicator, Modal, Text, Image, TouchableOpacity, ScrollView } from "react-native";
+import { View, StyleSheet, ActivityIndicator, Modal, Text, TouchableOpacity, ScrollView } from "react-native";
 import { WebView } from "react-native-webview";
-import { Asset } from "expo-asset";
-import * as FileSystem from "expo-file-system/legacy"; 
 import { COLORS } from "../../constants/colors";
 import { Ionicons } from "@expo/vector-icons";
+import { AI_API_URL } from "../../constants/ai-api";
 
-const threeJsAsset = require("../../assets/js/three.txt");
-const threeGlobeAsset = require("../../assets/js/three-globe.txt");
-
-// ============================================================================
-// COMPLETE EONET CATEGORY MAPPING
-// ============================================================================
-const iconFiles = {
-  // Existing icons
-  wildfires: require("../../assets/images/Fuego.jpg"),
-  floods: require("../../assets/images/Inundacion.png"),
-  landslides: require("../../assets/images/Landslide.png"),
-  severeStorms: require("../../assets/images/Tormenta E.png"),
-  volcanoes: require("../../assets/images/Volcan.png"),
-  
-  // TODO: Add these icons to your assets/images folder
-  // For now, using existing icons as placeholders
-  drought: require("../../assets/images/Fuego.jpg"), // Use fire as placeholder
-  earthquakes: require("../../assets/images/Volcan.png"), // Use volcano as placeholder
-  dustHaze: require("../../assets/images/Tormenta E.png"), // Use storm as placeholder
-  manmade: require("../../assets/images/Inundacion.png"), // Use flood as placeholder
-  seaLakeIce: require("../../assets/images/Inundacion.png"), // Use flood as placeholder
-  snow: require("../../assets/images/Tormenta E.png"), // Use storm as placeholder
-  tempExtremes: require("../../assets/images/Fuego.jpg"), // Use fire as placeholder
-  waterColor: require("../../assets/images/Inundacion.png"), // Use flood as placeholder
-};
-
-// ============================================================================
-// DISASTER TYPE INFO (for better UX)
-// ============================================================================
 const DISASTER_INFO = {
   wildfires: { name: "Wildfire", color: "#ff4500", emoji: "🔥" },
   volcanoes: { name: "Volcano", color: "#dc143c", emoji: "🌋" },
@@ -52,271 +23,267 @@ const DISASTER_INFO = {
   manmade: { name: "Man-made Event", color: "#696969", emoji: "⚠️" },
 };
 
-export default function GlobeMap({ points = null, style }) {
+export default function GlobeMap({ style }) {
   const [htmlContent, setHtmlContent] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [iconMap, setIconMap] = useState({});
-
-  // Modal state
   const [modalVisible, setModalVisible] = useState(false);
   const [selectedEvent, setSelectedEvent] = useState(null);
+  const [disastersData, setDisastersData] = useState([]);
 
   useEffect(() => {
-    const loadAssetsAndBuildHtml = async () => {
-      try {
-        // 1. Load three.js libraries
-        const threeJsLocalUri = (await Asset.fromModule(threeJsAsset).downloadAsync()).localUri;
-        const threeGlobeLocalUri = (await Asset.fromModule(threeGlobeAsset).downloadAsync()).localUri;
+    fetchDisasters();
+  }, []);
 
-        const threeJsCode = await FileSystem.readAsStringAsync(threeJsLocalUri);
-        const threeGlobeCode = await FileSystem.readAsStringAsync(threeGlobeLocalUri);
-
-        // 2. Convert icons to base64
-        const iconDataUrls = {};
-        for (const [key, moduleRef] of Object.entries(iconFiles)) {
-          try {
-            const assetLocal = await Asset.fromModule(moduleRef).downloadAsync();
-            const b64 = await FileSystem.readAsStringAsync(assetLocal.localUri, {
-              encoding: FileSystem.EncodingType.Base64
-            });
-            const ext = assetLocal.localUri.split('.').pop().toLowerCase();
-            const mime = ext === "jpg" || ext === "jpeg" ? "image/jpeg" : "image/png";
-            iconDataUrls[key] = `data:${mime};base64,${b64}`;
-          } catch (err) {
-            console.warn("Failed to load icon for", key, err);
-          }
-        }
-
-        setIconMap(iconDataUrls);
-
-        // 3. ALL EONET Categories
-        const categories = Object.keys(iconFiles);
-
-        // 4. Build HTML
-        const html = `
-          <!DOCTYPE html>
-          <html>
-            <head>
-              <meta name="viewport" content="width=device-width, initial-scale=1.0">
-              <style>
-                body { margin: 0; overflow: hidden; background-color: #000; }
-                canvas { display: block; }
-              </style>
-              <script>${threeJsCode}</script>
-              <script>${threeGlobeCode}</script>
-            </head>
-            <body>
-              <script>
-                (async function() {
-                  try {
-                    const ICON_MAP = ${JSON.stringify(iconDataUrls)};
-                    const DISASTER_INFO = ${JSON.stringify(DISASTER_INFO)};
-
-                    // Fetch EONET events
-                    async function fetchEonetEvents(categories) {
-                      const categoryParams = categories.map(c => 'category=' + encodeURIComponent(c)).join('&');
-                      const url = 'https://eonet.gsfc.nasa.gov/api/v3/events?status=open&' + categoryParams;
-                      const resp = await fetch(url);
-                      if (!resp.ok) throw new Error('EONET fetch failed: ' + resp.status);
-                      const data = await resp.json();
-                      return data.events || [];
-                    }
-
-                    // Setup scene
-                    const scene = new THREE.Scene();
-
-                    const globe = new ThreeGlobe()
-                      .globeImageUrl('https://raw.githubusercontent.com/vasturiano/three-globe/master/example/img/earth-blue-marble.jpg')
-                      .nightImageUrl('https://raw.githubusercontent.com/vasturiano/three-globe/master/example/img/earth-night.jpg')
-                      .bumpImageUrl('https://raw.githubusercontent.com/vasturiano/three-globe/master/example/img/earth-topology.png')
-                      .pointAltitude('magnitude')
-                      .pointColor('color')
-                      .pointLabel('title');
-
-                    scene.add(globe);
-
-                    // Lighting
-                    scene.add(new THREE.AmbientLight(0xffffff, 1.2));
-                    const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
-                    dirLight.position.set(5, 3, 5);
-                    scene.add(dirLight);
-
-                    // Camera
-                    const camera = new THREE.PerspectiveCamera();
-                    camera.aspect = window.innerWidth / window.innerHeight;
-                    camera.updateProjectionMatrix();
-                    camera.position.z = 300;
-
-                    // Renderer
-                    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
-                    renderer.setSize(window.innerWidth, window.innerHeight);
-                    document.body.appendChild(renderer.domElement);
-
-                    const GLOBE_RADIUS = 100;
-                    const spriteGroup = new THREE.Group();
-                    scene.add(spriteGroup);
-
-                    // Convert lat/lng to 3D position
-                    function latLngToCartesian(lat, lon, r) {
-                      const phi = (90 - lat) * (Math.PI / 180);
-                      const theta = (lon + 180) * (Math.PI / 180);
-                      const x = - (r * Math.sin(phi) * Math.cos(theta));
-                      const z = (r * Math.sin(phi) * Math.sin(theta));
-                      const y = (r * Math.cos(phi));
-                      return new THREE.Vector3(x, y, z);
-                    }
-
-                    // Click detection
-                    const raycaster = new THREE.Raycaster();
-                    const mouse = new THREE.Vector2();
-                    
-                    function onClick(event) {
-                      const rect = renderer.domElement.getBoundingClientRect();
-                      mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
-                      mouse.y = - ((event.clientY - rect.top) / rect.height) * 2 + 1;
-                      raycaster.setFromCamera(mouse, camera);
-                      const intersects = raycaster.intersectObjects(spriteGroup.children, true);
-                      if (intersects.length > 0) {
-                        const obj = intersects[0].object;
-                        const payload = obj.userData || null;
-                        if (payload) {
-                          window.ReactNativeWebView.postMessage(JSON.stringify({ 
-                            type: 'eventClick', 
-                            payload 
-                          }));
-                        }
-                      }
-                    }
-                    renderer.domElement.addEventListener('click', onClick);
-
-                    // Load events and create sprites
-                    const rawEvents = await fetchEonetEvents(${JSON.stringify(categories)});
-                    const points = [];
-                    const loader = new THREE.TextureLoader();
-
-                    await Promise.all(rawEvents.map(async evt => {
-                      if (!evt.geometry || evt.geometry.length === 0) return;
-                      const geom = evt.geometry[evt.geometry.length - 1];
-                      const coords = geom.coordinates;
-                      const lat = coords[1];
-                      const lng = coords[0];
-
-                      const catSlug = evt.categories && evt.categories[0] && evt.categories[0].id 
-                        ? evt.categories[0].id 
-                        : 'unknown';
-                      
-                      const iconData = ICON_MAP[catSlug] || null;
-                      const disasterInfo = DISASTER_INFO[catSlug] || { 
-                        name: catSlug, 
-                        color: '#888888', 
-                        emoji: '📍' 
-                      };
-
-                      const payload = {
-                        lat,
-                        lng,
-                        title: evt.title,
-                        id: evt.id,
-                        category: catSlug,
-                        categoryName: disasterInfo.name,
-                        emoji: disasterInfo.emoji,
-                        date: geom.date,
-                        description: evt.description || '',
-                        link: evt.sources && evt.sources[0] ? evt.sources[0].url : null,
-                        magnitude: 0.4
-                      };
-
-                      points.push(Object.assign({}, payload, { color: disasterInfo.color }));
-
-                      if (!iconData) return;
-
-                      return new Promise(resolve => {
-                        loader.load(iconData, (texture) => {
-                          const material = new THREE.SpriteMaterial({ 
-                            map: texture, 
-                            depthTest: true,
-                            sizeAttenuation: false // FIXED: Icons stay same size
-                          });
-                          const sprite = new THREE.Sprite(material);
-                          
-                          sprite.scale.set(0.05, 0.05, 1); // FIXED: Smaller, consistent size
-                          
-                          const pos = latLngToCartesian(lat, lng, GLOBE_RADIUS + 2);
-                          sprite.position.copy(pos);
-                          
-                          // FIXED: Make sprite always face camera
-                          sprite.userData = payload;
-                          
-                          spriteGroup.add(sprite);
-                          resolve();
-                        }, undefined, (err) => {
-                          console.warn('Texture load error', err);
-                          resolve();
-                        });
-                      });
-                    }));
-
-                    globe.pointsData(points);
-
-                    // Animation loop
-                    function animate() {
-                      requestAnimationFrame(animate);
-                      globe.rotation.y += 0.002; // Slow rotation
-                      
-                      // FIXED: Make sprites face camera (billboard effect)
-                      spriteGroup.children.forEach(sprite => {
-                        sprite.quaternion.copy(camera.quaternion);
-                      });
-                      
-                      renderer.render(scene, camera);
-                    }
-                    animate();
-
-                    // Handle resize
-                    window.addEventListener('resize', () => {
-                      camera.aspect = window.innerWidth / window.innerHeight;
-                      camera.updateProjectionMatrix();
-                      renderer.setSize(window.innerWidth, window.innerHeight);
-                    });
-
-                    window.ReactNativeWebView.postMessage(JSON.stringify({ 
-                      type: 'ready', 
-                      count: points.length 
-                    }));
-
-                  } catch (e) {
-                    window.ReactNativeWebView.postMessage(JSON.stringify({ 
-                      type: 'error', 
-                      message: e.message 
-                    }));
-                  }
-                })();
-              </script>
-            </body>
-          </html>
-        `;
-
-        setHtmlContent(html);
-        setLoading(false);
-
-      } catch (e) {
-        console.error("Failed to load assets for WebView", e);
-        setLoading(false);
+  const fetchDisasters = async () => {
+    try {
+      console.log('🌍 Fetching disasters from backend...');
+      
+      // Fetch from YOUR backend (not EONET directly - that's blocked!)
+      const response = await fetch(`${AI_API_URL}/disasters`);
+      
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
       }
-    };
+      
+      const data = await response.json();
+      console.log(`✅ Loaded ${data.count} disasters from backend`);
+      
+      setDisastersData(data.events);
+      buildGlobe(data.events);
+      
+    } catch (err) {
+      console.error('❌ Failed to fetch disasters:', err);
+      // Fallback: show globe without disasters
+      buildGlobe([]);
+    }
+  };
 
-    loadAssetsAndBuildHtml();
-  }, []); 
+  const buildGlobe = (events) => {
+    const html = `
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+          <style>
+            body { 
+              margin: 0; 
+              overflow: hidden; 
+              background: linear-gradient(to bottom, #000428, #004e92);
+            }
+            canvas { display: block; }
+            #info {
+              position: absolute;
+              top: 10px;
+              left: 10px;
+              color: white;
+              font-family: Arial;
+              background: rgba(0,0,0,0.7);
+              padding: 10px;
+              border-radius: 5px;
+              font-size: 12px;
+            }
+          </style>
+          <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+        </head>
+        <body>
+          <div id="info">🌍 Loading disasters...</div>
+          <script>
+            const DISASTER_INFO = ${JSON.stringify(DISASTER_INFO)};
+            const DISASTERS = ${JSON.stringify(events)};
+            
+            // Setup scene
+            const scene = new THREE.Scene();
+            const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+            camera.position.z = 250;
 
-  // Handle messages from WebView
+            const renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            document.body.appendChild(renderer.domElement);
+
+            // Create Earth
+            const geometry = new THREE.SphereGeometry(100, 64, 64);
+            const textureLoader = new THREE.TextureLoader();
+            
+            // Use a simpler, more reliable texture
+            const earthTexture = textureLoader.load(
+              'https://unpkg.com/three-globe/example/img/earth-blue-marble.jpg',
+              () => {
+                console.log('✅ Earth texture loaded');
+                document.getElementById('info').textContent = '🌍 ' + DISASTERS.length + ' disasters';
+              },
+              undefined,
+              (err) => {
+                console.error('Texture failed, using color');
+                material.color.set(0x2233ff);
+                document.getElementById('info').textContent = '🌍 ' + DISASTERS.length + ' disasters';
+              }
+            );
+            
+            const material = new THREE.MeshPhongMaterial({
+              map: earthTexture,
+              color: 0x2233ff,
+              shininess: 5
+            });
+            
+            const earth = new THREE.Mesh(geometry, material);
+            scene.add(earth);
+
+            // Lighting
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.8);
+            scene.add(ambientLight);
+
+            const directionalLight = new THREE.DirectionalLight(0xffffff, 0.6);
+            directionalLight.position.set(5, 3, 5);
+            scene.add(directionalLight);
+
+            // Stars
+            const starsGeometry = new THREE.BufferGeometry();
+            const starsMaterial = new THREE.PointsMaterial({ color: 0xffffff, size: 2 });
+            const starsVertices = [];
+            for (let i = 0; i < 5000; i++) {
+              starsVertices.push(
+                (Math.random() - 0.5) * 2000,
+                (Math.random() - 0.5) * 2000,
+                (Math.random() - 0.5) * 2000
+              );
+            }
+            starsGeometry.setAttribute('position', new THREE.Float32BufferAttribute(starsVertices, 3));
+            const stars = new THREE.Points(starsGeometry, starsMaterial);
+            scene.add(stars);
+
+            // Convert lat/lng to 3D
+            function latLngToVector3(lat, lon, radius) {
+              const phi = (90 - lat) * (Math.PI / 180);
+              const theta = (lon + 180) * (Math.PI / 180);
+              return new THREE.Vector3(
+                -(radius * Math.sin(phi) * Math.cos(theta)),
+                radius * Math.cos(phi),
+                radius * Math.sin(phi) * Math.sin(theta)
+              );
+            }
+
+            // Add disaster markers
+            const markerGroup = new THREE.Group();
+            scene.add(markerGroup);
+            const markers = [];
+
+            console.log('Adding', DISASTERS.length, 'disaster markers');
+
+            DISASTERS.forEach((evt, idx) => {
+              const info = DISASTER_INFO[evt.category] || { color: '#888888', emoji: '📍', name: evt.category };
+              
+              // Create marker - LARGER and BRIGHTER
+              const markerGeometry = new THREE.SphereGeometry(3, 16, 16);
+              const markerMaterial = new THREE.MeshBasicMaterial({ 
+                color: info.color,
+                transparent: false
+              });
+              const marker = new THREE.Mesh(markerGeometry, markerMaterial);
+              
+              const pos = latLngToVector3(evt.lat, evt.lng, 103);
+              marker.position.copy(pos);
+              
+              marker.userData = {
+                title: evt.title,
+                category: evt.category,
+                categoryName: info.name,
+                emoji: info.emoji,
+                lat: evt.lat,
+                lng: evt.lng,
+                date: evt.date,
+                description: evt.description || '',
+                link: evt.link
+              };
+              
+              markerGroup.add(marker);
+              markers.push(marker);
+              
+              if (idx < 5) {
+                console.log('Marker', idx, ':', evt.title, 'at', evt.lat, evt.lng, 'color:', info.color);
+              }
+            });
+
+            console.log('✅ Added', markers.length, 'markers to scene');
+
+            window.ReactNativeWebView.postMessage(JSON.stringify({ 
+              type: 'ready', 
+              count: markers.length 
+            }));
+
+            // Click handling
+            const raycaster = new THREE.Raycaster();
+            const mouse = new THREE.Vector2();
+
+            renderer.domElement.addEventListener('click', (event) => {
+              const rect = renderer.domElement.getBoundingClientRect();
+              mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+              mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+
+              raycaster.setFromCamera(mouse, camera);
+              const intersects = raycaster.intersectObjects(markers);
+
+              if (intersects.length > 0) {
+                console.log('Clicked marker:', intersects[0].object.userData.title);
+                window.ReactNativeWebView.postMessage(JSON.stringify({
+                  type: 'eventClick',
+                  payload: intersects[0].object.userData
+                }));
+              }
+            });
+
+            // Animation
+            let autoRotate = true;
+            let lastTouchX = 0;
+
+            renderer.domElement.addEventListener('touchstart', (e) => {
+              autoRotate = false;
+              lastTouchX = e.touches[0].clientX;
+            });
+
+            renderer.domElement.addEventListener('touchmove', (e) => {
+              const touchX = e.touches[0].clientX;
+              const delta = touchX - lastTouchX;
+              earth.rotation.y += delta * 0.005;
+              markerGroup.rotation.y += delta * 0.005;
+              lastTouchX = touchX;
+            });
+
+            renderer.domElement.addEventListener('touchend', () => {
+              setTimeout(() => { autoRotate = true; }, 2000);
+            });
+
+            function animate() {
+              requestAnimationFrame(animate);
+              
+              if (autoRotate) {
+                earth.rotation.y += 0.001;
+                markerGroup.rotation.y += 0.001;
+              }
+              
+              renderer.render(scene, camera);
+            }
+            animate();
+
+            window.addEventListener('resize', () => {
+              camera.aspect = window.innerWidth / window.innerHeight;
+              camera.updateProjectionMatrix();
+              renderer.setSize(window.innerWidth, window.innerHeight);
+            });
+          </script>
+        </body>
+      </html>
+    `;
+
+    setHtmlContent(html);
+    setLoading(false);
+  };
+
   const onMessage = (event) => {
     try {
       const data = JSON.parse(event.nativeEvent.data);
       if (data.type === 'ready') {
-        console.log('✅ Globe ready. Showing', data.count, 'events');
-      } else if (data.type === 'error') {
-        console.warn('❌ Globe error:', data.message);
-      } else if (data.type === 'eventClick' && data.payload) {
+        console.log(`✅ Globe ready. Showing ${data.count} disasters`);
+      } else if (data.type === 'eventClick') {
         setSelectedEvent(data.payload);
         setModalVisible(true);
       }
@@ -329,7 +296,8 @@ export default function GlobeMap({ points = null, style }) {
     return (
       <View style={[styles.container, styles.centerLoader]}>
         <ActivityIndicator size="large" color={COLORS.primary} />
-        <Text style={styles.loadingText}>Loading disasters...</Text>
+        <Text style={styles.loadingText}>Loading globe...</Text>
+        <Text style={styles.loadingSubtext}>Fetching disaster data...</Text>
       </View>
     );
   }
@@ -338,21 +306,18 @@ export default function GlobeMap({ points = null, style }) {
     <View style={[styles.container, style]}>
       <WebView
         originWhitelist={['*']}
-        source={{ html: htmlContent }} 
+        source={{ html: htmlContent }}
         style={styles.webview}
         javaScriptEnabled={true}
         domStorageEnabled={true}
-        mixedContentMode="compatibility"
-        allowsInlineMediaPlayback={true} 
         onMessage={onMessage}
       />
 
-      {/* Event Details Modal */}
+      {/* Event Modal */}
       <Modal visible={modalVisible} transparent animationType="slide" onRequestClose={() => setModalVisible(false)}>
         <View style={modalStyles.overlay}>
           <View style={modalStyles.card}>
             <ScrollView contentContainerStyle={{ padding: 16 }}>
-              {/* Header with emoji */}
               <View style={modalStyles.header}>
                 <Text style={modalStyles.emoji}>{selectedEvent?.emoji || '📍'}</Text>
                 <TouchableOpacity 
@@ -363,48 +328,41 @@ export default function GlobeMap({ points = null, style }) {
                 </TouchableOpacity>
               </View>
 
-              {/* Title */}
               <Text style={modalStyles.title}>{selectedEvent?.title || 'Event'}</Text>
               
-              {/* Category & Date */}
               <View style={modalStyles.metaRow}>
                 <View style={modalStyles.badge}>
-                  <Text style={modalStyles.badgeText}>{selectedEvent?.categoryName || selectedEvent?.category}</Text>
+                  <Text style={modalStyles.badgeText}>{selectedEvent?.categoryName}</Text>
                 </View>
                 <Text style={modalStyles.date}>
                   {selectedEvent?.date ? new Date(selectedEvent.date).toLocaleDateString() : ''}
                 </Text>
               </View>
 
-              {/* Description */}
               {selectedEvent?.description && (
                 <Text style={modalStyles.description}>{selectedEvent.description}</Text>
               )}
 
-              {/* Coordinates */}
               <View style={modalStyles.infoSection}>
                 <Ionicons name="location" size={20} color={COLORS.primary} />
                 <Text style={modalStyles.infoText}>
-                  {selectedEvent?.lat?.toFixed(4)}, {selectedEvent?.lng?.toFixed(4)}
+                  {selectedEvent?.lat?.toFixed(4)}°, {selectedEvent?.lng?.toFixed(4)}°
                 </Text>
               </View>
 
-              {/* More Info Link */}
               {selectedEvent?.link && (
                 <TouchableOpacity 
                   style={modalStyles.linkButton}
                   onPress={() => {
-                    // Open link in browser
                     const { Linking } = require('react-native');
                     Linking.openURL(selectedEvent.link);
                   }}
                 >
                   <Ionicons name="open-outline" size={20} color={COLORS.white} />
-                  <Text style={modalStyles.linkText}>View Source</Text>
+                  <Text style={modalStyles.linkText}>View NASA Source</Text>
                 </TouchableOpacity>
               )}
 
-              {/* Close Button */}
               <TouchableOpacity 
                 style={modalStyles.closeButtonBottom} 
                 onPress={() => setModalVisible(false)}
@@ -422,7 +380,7 @@ export default function GlobeMap({ points = null, style }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    width: '100%',
+    backgroundColor: '#000',
   },
   centerLoader: {
     justifyContent: 'center',
@@ -430,7 +388,14 @@ const styles = StyleSheet.create({
   },
   loadingText: {
     marginTop: 12,
-    color: COLORS.textLight,
+    color: COLORS.white,
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  loadingSubtext: {
+    marginTop: 8,
+    color: COLORS.white,
+    opacity: 0.7,
     fontSize: 14,
   },
   webview: {
@@ -450,11 +415,6 @@ const modalStyles = StyleSheet.create({
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
     maxHeight: '80%',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: -4 },
-    shadowOpacity: 0.25,
-    shadowRadius: 8,
-    elevation: 10,
   },
   header: {
     flexDirection: 'row',
