@@ -1,5 +1,6 @@
+// backend/src/server.js - FIXED VERSION
 import express from "express";
-import { eq, and, desc } from "drizzle-orm";
+import { eq, and, desc, sql } from "drizzle-orm";
 import { ENV } from "./config/env.js";
 import { db } from "./config/db.js";
 import {
@@ -8,25 +9,60 @@ import {
   weatherCacheTable, 
 } from "./dataBase/schema.js";
 
-import healthCheckJob from "./config/cron.js";
-import photoJob from "./config/cron.js";
+// FIXED: Import both cron jobs correctly
+import { healthCheckJob, photoJob } from "./config/cron.js";
 import fetch from "node-fetch";
 
 const app = express();
 const PORT = ENV.PORT || 8001;
 
+// FIXED: Start cron jobs properly in production
 if (ENV.NODE_ENV === "production") {
+  console.log("Starting cron jobs in production mode...");
   healthCheckJob.start();
   photoJob.start();
+  console.log("Cron jobs started successfully");
 }
 
 app.use(express.json());
 
-// --- YOUR EXISTING ROUTES ---
+// Health check
 app.get("/api/health", (req, res) => {
-  res.status(200).json({ success: true });
+  res.status(200).json({ success: true, timestamp: new Date().toISOString() });
 });
 
+// Secure city search (no API key exposed to client)
+app.get("/api/search-city", async (req, res) => {
+  const { q } = req.query; 
+
+  if (!q) {
+    return res.status(400).json({ error: "Missing search query" });
+  }
+
+  const { OPENWEATHER_API_KEY } = ENV;
+  if (!OPENWEATHER_API_KEY) {
+    console.error("Missing OPENWEATHER_API_KEY");
+    return res.status(500).json({ error: "Server configuration error" });
+  }
+
+  try {
+    const geoApiUrl = `http://api.openweathermap.org/geo/1.0/direct?q=${q}&limit=5&appid=${OPENWEATHER_API_KEY}`;
+    
+    const response = await fetch(geoApiUrl);
+    if (!response.ok) {
+      throw new Error("Failed to fetch from OpenWeatherMap");
+    }
+
+    const data = await response.json();
+    res.status(200).json(data); 
+
+  } catch (error) {
+    console.error("Error in /api/search-city route:", error.message);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+// Interest Zones CRUD
 app.post("/api/interestZone", async (req, res) => {
   try {
     const { userId, title, latitude, longitude } = req.body;
@@ -69,7 +105,7 @@ app.delete("/api/interestZone/:userId/:id", async (req, res) => {
         ),
       );
 
-    res.status(200).json({ message: "Zone of Interest removed succesfully" });
+    res.status(200).json({ message: "Zone of Interest removed successfully" });
   } catch (error) {
     console.log("Error deleting Zone of Interest:", error.message);
     res.status(500).json({ error: "Something went wrong" });
@@ -92,49 +128,51 @@ app.get("/api/interestZone/:userId", async (req, res) => {
   }
 });
 
+// FIXED: Get RANDOM photo from database
 app.get("/api/photoOfTheDay", async (req, res) => {
   try {
-    const [latestPhoto] = await db
+    // Select a random photo using SQL RANDOM()
+    const [randomPhoto] = await db
       .select()
       .from(photoOfTheDayTable)
-      .orderBy(desc(photoOfTheDayTable.date))
+      .orderBy(sql`RANDOM()`)
       .limit(1);
 
-    if (!latestPhoto) {
-      // Return fallback photo when database is empty
+    if (!randomPhoto) {
       console.log("No photo in DB, returning fallback");
       return res.status(200).json({
         title: "Horsehead Nebula",
-        url: "https://apod.nasa.gov/apod/image/2301/Horsehead_Hubble_1225.jpg",
-        explanation: "The Horsehead Nebula is one of the most identifiable nebulae in the sky, located in the constellation Orion. This iconic shape is sculpted from dense clouds of molecular gas and dust.",
-        copyright: "NASA, ESA, Hubble Heritage Team",
+        image: "https://apod.nasa.gov/apod/image/2301/Horsehead_Hubble_1225.jpg",
+        description: "The Horsehead Nebula is one of the most identifiable nebulae in the sky.",
+        credits: "NASA, ESA, Hubble Heritage Team",
       });
     }
 
+    // Return the photo with consistent key names
     res.status(200).json({
-      title: latestPhoto.title,
-      url: latestPhoto.image,
-      explanation: latestPhoto.description,
-      copyright: latestPhoto.credits,
+      title: randomPhoto.title,
+      image: randomPhoto.image,
+      description: randomPhoto.description,
+      credits: randomPhoto.credits,
     });
   } catch (error) {
     console.log("Error fetching Photo of the Day", error);
-    // Return fallback photo on error
     res.status(200).json({
       title: "Horsehead Nebula",
-      url: "https://apod.nasa.gov/apod/image/2301/Horsehead_Hubble_1225.jpg",
-      explanation: "The Horsehead Nebula is one of the most identifiable nebulae in the sky, located in the constellation Orion. This iconic shape is sculpted from dense clouds of molecular gas and dust.",
-      copyright: "NASA, ESA, Hubble Heritage Team",
+      image: "https://apod.nasa.gov/apod/image/2301/Horsehead_Hubble_1225.jpg",
+      description: "The Horsehead Nebula is one of the most identifiable nebulae in the sky.",
+      credits: "NASA, ESA, Hubble Heritage Team",
     });
   }
 });
 
+// Manual photo upload endpoint
 app.post("/api/photoOfTheDay", async (req, res) => {
   try {
     const { title, credits, image, description } = req.body;
 
     if (!title || !image) {
-      return res.status(400).json({ error: "Missing required fields" });
+      return res.status(400).json({ error: "Missing required fields (title, image)" });
     }
 
     const today = new Date().toISOString().split('T')[0];
@@ -143,9 +181,9 @@ app.post("/api/photoOfTheDay", async (req, res) => {
       .insert(photoOfTheDayTable)
       .values({
         title,
-        credits,
+        credits: credits || "NASA",
         image,
-        description,
+        description: description || "",
         date: today,
       })
       .returning();
@@ -157,52 +195,23 @@ app.post("/api/photoOfTheDay", async (req, res) => {
   }
 });
 
-// 🔥 Manual test route for now
-const fetchAndInsertPhoto = async () => {
-  const res = await fetch("https://picsum.photos/800/600");
-  const image = res.url;
-
-  const photo = {
-    title: "Temporary Photo of the Day",
-    credits: "Lorem Picsum",
-    image,
-    description: "Mock image used while NASA API is offline",
-  };
-
-  await db.insert(photoOfTheDay).values(photo);
-  return photo;
-};
-
-app.get("/api/fetch-photo", async (req, res) => {
-  try {
-    const photo = await fetchAndInsertPhoto();
-    res.status(200).json({ success: true, photo });
-  } catch (err) {
-    console.error("Error fetching photo:", err);
-    res.status(500).json({ success: false, error: err.message });
-  }
-});
-
-// --- 2. ADD THIS NEW "SMART CACHE" ROUTE ---
+// Weather cache endpoint
 app.post("/api/get-weather", async (req, res) => {
   const { latitude, longitude } = req.body;
   if (!latitude || !longitude) {
     return res.status(400).json({ error: "Missing coordinates" });
   }
 
-  // Get the secret key from your config
   const { OPENWEATHER_API_KEY } = ENV;
   if (!OPENWEATHER_API_KEY) {
     console.error("Missing OPENWEATHER_API_KEY");
     return res.status(500).json({ error: "Server configuration error" });
   }
 
-  // Round coordinates for the cache grid
   const gridLat = Math.round(latitude * 10) / 10;
   const gridLng = Math.round(longitude * 10) / 10;
 
   try {
-    // 1. Check the cache
     const [cachedWeather] = await db
       .select()
       .from(weatherCacheTable)
@@ -214,20 +223,17 @@ app.post("/api/get-weather", async (req, res) => {
       )
       .limit(1);
 
-    // 2. Check if data is stale (older than 1 hour)
-    const oneHour = 3600000; // 1 hour in milliseconds
+    const oneHour = 3600000; 
     const isStale =
       !cachedWeather ||
       new Date().getTime() - new Date(cachedWeather.updatedAt).getTime() >
         oneHour;
 
     if (cachedWeather && !isStale) {
-      // CACHE HIT: Return old data
       console.log(`Cache HIT for grid: ${gridLat}, ${gridLng}`);
       return res.status(200).json(cachedWeather.weatherData);
     }
 
-    // CACHE MISS: Get new data
     console.log(`Cache MISS for grid: ${gridLat}, ${gridLng}`);
     const weatherResponse = await fetch(
       `https://api.openweathermap.org/data/2.5/weather?lat=${latitude}&lon=${longitude}&appid=${OPENWEATHER_API_KEY}&units=metric`,
@@ -241,8 +247,6 @@ app.post("/api/get-weather", async (req, res) => {
 
     const weatherData = await weatherResponse.json();
 
-    // 3. Save new data to cache ("upsert")
-    // Make sure your unique constraint is set on (gridLat, gridLng) in your schema
     await db
       .insert(weatherCacheTable)
       .values({
@@ -259,7 +263,6 @@ app.post("/api/get-weather", async (req, res) => {
         },
       });
 
-    // 4. Return new data
     return res.status(200).json(weatherData);
   } catch (error) {
     console.error("Error in /api/get-weather route:", error.message);
@@ -267,6 +270,7 @@ app.post("/api/get-weather", async (req, res) => {
   }
 });
 
-app.listen(PORT, "0.0.0.0", () => { // <-- ADD "0.0.0.0"
+app.listen(PORT, "0.0.0.0", () => {
   console.log(`Server is running on PORT: ${PORT} and listening on all interfaces`);
+  console.log(`Environment: ${ENV.NODE_ENV}`);
 });

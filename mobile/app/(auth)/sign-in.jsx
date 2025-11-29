@@ -148,7 +148,15 @@ const SignInScreen = () => {
                 />
               </TouchableOpacity>
             </View>
-
+            <TouchableOpacity
+  onPress={() => router.push("/(auth)/forgot-password")}
+  style={{ alignSelf: 'flex-end', marginBottom: 15 }}
+>
+  <Text style={{ color: COLORS.primary, fontSize: 14 }}>
+    Forgot Password?
+  </Text>
+</TouchableOpacity>
+            
             <TouchableOpacity
               style={[authStyles.authButton, loading && authStyles.buttonDisabled]}
               onPress={handleSignIn}
