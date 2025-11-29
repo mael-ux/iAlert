@@ -247,6 +247,69 @@ async def get_model_info():
         "features": ["Region", "Country"]
     }
 
+# Disasters proxy endpoint (bypasses mobile network restrictions)
+@app.get("/api/disasters")
+async def get_disasters(limit: int = 100):
+    """
+    Fetch active disasters from NASA EONET API
+    Acts as a proxy to bypass mobile network restrictions
+    """
+    import httpx
+    
+    try:
+        categories = [
+            "wildfires", "volcanoes", "severeStorms", "floods", 
+            "earthquakes", "landslides", "drought", "dustHaze",
+            "tempExtremes", "seaLakeIce", "snow", "waterColor", "manmade"
+        ]
+        
+        category_params = "&".join([f"category={c}" for c in categories])
+        url = f"https://eonet.gsfc.nasa.gov/api/v3/events?status=open&limit={limit}&{category_params}"
+        
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.get(url)
+            
+            if response.status_code != 200:
+                raise HTTPException(status_code=502, detail="EONET API unavailable")
+            
+            data = response.json()
+            events = data.get("events", [])
+            
+            # Process events
+            processed_events = []
+            for evt in events:
+                if not evt.get("geometry") or len(evt["geometry"]) == 0:
+                    continue
+                
+                geom = evt["geometry"][-1]
+                coords = geom.get("coordinates", [])
+                
+                if len(coords) < 2:
+                    continue
+                
+                processed_events.append({
+                    "id": evt.get("id"),
+                    "title": evt.get("title"),
+                    "description": evt.get("description", ""),
+                    "category": evt["categories"][0]["id"] if evt.get("categories") else "unknown",
+                    "lat": coords[1],
+                    "lng": coords[0],
+                    "date": geom.get("date"),
+                    "link": evt["sources"][0]["url"] if evt.get("sources") else None
+                })
+            
+            return {
+                "status": "ok",
+                "count": len(processed_events),
+                "events": processed_events
+            }
+            
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to fetch disasters: {str(e)}"
+        )
+
 # Error handlers
 @app.exception_handler(404)
 async def not_found_handler(request, exc):
