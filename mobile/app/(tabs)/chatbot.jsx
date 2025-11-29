@@ -2,11 +2,17 @@ import React, { useState, useRef, useEffect } from "react";
 import {
   View,
   Text,
-  TextInput,
   TouchableOpacity,
   ScrollView,
   StyleSheet,
+  ActivityIndicator,
 } from "react-native";
+import { COLORS } from "../../constants/colors";
+
+// ⚠️ IMPORTANT: Update this URL after deploying to Render
+// Development: "http://10.0.2.2:8000/api" (Android) or "http://localhost:8000/api" (iOS)
+// Production: "https://ialert-ai-service.onrender.com/api"
+const AI_API_URL = "https://ialert-ai-service.onrender.com/api";
 
 export default function ChatBot() {
   const [messages, setMessages] = useState([
@@ -16,13 +22,14 @@ export default function ChatBot() {
   const [region, setRegion] = useState("");
   const [countries, setCountries] = useState([]);
   const [country, setCountry] = useState("");
-  const [input, setInput] = useState("");
+
   const scrollRef = useRef();
 
   const [showContinents, setShowContinents] = useState(true);
   const [showCountries, setShowCountries] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
 
-  // Auto-scroll
+  // Auto-scroll to bottom when messages change
   useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollToEnd({ animated: true });
@@ -32,20 +39,22 @@ export default function ChatBot() {
   const continentes = ["Asia", "Europe", "Africa", "America", "Oceania"];
 
   // ------------------------------------------
-  // 1️⃣ Seleccionar continente
+  // 1️⃣ Select Continent
   // ------------------------------------------
   const elegirContinente = async (cont) => {
     setRegion(cont);
-
     setMessages((m) => [...m, { from: "user", text: cont }]);
     setMessages((m) => [...m, { from: "bot", text: "Cargando países... 🔄" }]);
-
     setShowContinents(false);
+    setIsLoading(true);
 
     try {
-      const response = await fetch(
-        `http://10.0.2.2:8001/api/countries/${cont}`
-      );
+      const response = await fetch(`${AI_API_URL}/countries/${cont}`);
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      
       const data = await response.json();
 
       setCountries(data.countries);
@@ -56,38 +65,45 @@ export default function ChatBot() {
         { from: "bot", text: "Perfecto 👍 Ahora elige un país:" },
       ]);
     } catch (err) {
+      console.error("Error fetching countries:", err);
       setMessages((m) => [
         ...m,
-        { from: "bot", text: "⚠️ Error cargando países." },
+        { 
+          from: "bot", 
+          text: "⚠️ Error cargando países. Verifica tu conexión a internet." 
+        },
       ]);
+      // Reset to allow retry
+      setShowContinents(true);
+    } finally {
+      setIsLoading(false);
     }
   };
 
   // ------------------------------------------
-  // 2️⃣ Seleccionar país
+  // 2️⃣ Select Country
   // ------------------------------------------
   const elegirPais = async (p) => {
     setCountry(p);
-
     setMessages((m) => [...m, { from: "user", text: p }]);
-
     setShowCountries(false);
-
     setMessages((m) => [
       ...m,
       { from: "bot", text: "Procesando predicción... ⏳" },
     ]);
+    setIsLoading(true);
 
-    // Llamar IA
+    // Call AI prediction endpoint
     try {
-      const response = await fetch(
-        "http://10.0.2.2:8001/api/predict-disaster",
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ region, country: p }),
-        }
-      );
+      const response = await fetch(`${AI_API_URL}/predict-disaster`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ region, country: p }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
 
       const data = await response.json();
 
@@ -97,22 +113,36 @@ export default function ChatBot() {
           { from: "bot", text: "❌ Error obteniendo predicción." },
         ]);
       } else {
+        // Format predictions nicely
         let texto = `📊 *Predicción para ${p}, ${region}:*\n\n`;
 
-        Object.entries(data.predictions).forEach(([desastre, prob]) => {
-          texto += `• ${desastre}: ${(prob * 100).toFixed(2)}%\n`;
+        // Sort predictions by probability (highest first)
+        const sortedPredictions = Object.entries(data.predictions)
+          .sort(([, a], [, b]) => b - a)
+          .slice(0, 5); // Show top 5 only
+
+        sortedPredictions.forEach(([desastre, prob]) => {
+          const percentage = (prob * 100).toFixed(2);
+          const emoji = prob > 0.3 ? "🔴" : prob > 0.1 ? "🟡" : "🟢";
+          texto += `${emoji} ${desastre}: ${percentage}%\n`;
         });
 
         setMessages((m) => [...m, { from: "bot", text: texto }]);
       }
     } catch (e) {
+      console.error("Prediction error:", e);
       setMessages((m) => [
         ...m,
-        { from: "bot", text: "⚠️ No se pudo conectar con la IA." },
+        { 
+          from: "bot", 
+          text: "⚠️ No se pudo conectar con el servicio de IA. Verifica tu conexión." 
+        },
       ]);
+    } finally {
+      setIsLoading(false);
     }
 
-    // Reset para nueva consulta
+    // Reset for new query
     setRegion("");
     setCountry("");
     setCountries([]);
@@ -143,8 +173,15 @@ export default function ChatBot() {
           </View>
         ))}
 
-        {/* Continentes */}
-        {showContinents && (
+        {/* Loading indicator */}
+        {isLoading && (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="small" color={COLORS.primary} />
+          </View>
+        )}
+
+        {/* Continent buttons */}
+        {showContinents && !isLoading && (
           <View style={styles.btnContainer}>
             {continentes.map((c, i) => (
               <TouchableOpacity
@@ -158,18 +195,24 @@ export default function ChatBot() {
           </View>
         )}
 
-        {/* Países */}
-        {showCountries && (
+        {/* Country buttons */}
+        {showCountries && !isLoading && (
           <View style={styles.btnContainer}>
-            {countries.map((p, i) => (
-              <TouchableOpacity
-                key={i}
-                style={styles.countryBtn}
-                onPress={() => elegirPais(p)}
-              >
-                <Text style={styles.countryBtnText}>{p}</Text>
-              </TouchableOpacity>
-            ))}
+            <ScrollView 
+              horizontal 
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.countryScrollContainer}
+            >
+              {countries.map((p, i) => (
+                <TouchableOpacity
+                  key={i}
+                  style={styles.countryBtn}
+                  onPress={() => elegirPais(p)}
+                >
+                  <Text style={styles.countryBtnText}>{p}</Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
           </View>
         )}
       </ScrollView>
@@ -178,18 +221,29 @@ export default function ChatBot() {
 }
 
 // ----------------------------------------------------------
-// ESTILOS TIPO WHATSAPP MEJORADOS
+// IMPROVED WHATSAPP-STYLE DESIGN
 // ----------------------------------------------------------
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#ECE5DD" },
+  container: { 
+    flex: 1, 
+    backgroundColor: "#ECE5DD" 
+  },
 
-  chat: { flex: 1, padding: 10 },
+  chat: { 
+    flex: 1, 
+    padding: 10 
+  },
 
   bubble: {
     marginVertical: 6,
     padding: 12,
     maxWidth: "75%",
     borderRadius: 16,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
   },
 
   botBubble: {
@@ -204,27 +258,49 @@ const styles = StyleSheet.create({
     borderBottomRightRadius: 0,
   },
 
-  botText: { color: "#000", fontSize: 15 },
-  userText: { color: "#000", fontSize: 15 },
+  botText: { 
+    color: "#000", 
+    fontSize: 15,
+    lineHeight: 20,
+  },
+  
+  userText: { 
+    color: "#000", 
+    fontSize: 15 
+  },
+
+  loadingContainer: {
+    alignItems: "center",
+    paddingVertical: 10,
+  },
 
   btnContainer: {
-    flexDirection: "row",
-    flexWrap: "wrap",
     marginVertical: 15,
-    justifyContent: "center",
+    paddingHorizontal: 5,
   },
 
   contBtn: {
     backgroundColor: "#34B7F1",
-    paddingVertical: 10,
-    paddingHorizontal: 16,
+    paddingVertical: 12,
+    paddingHorizontal: 20,
     borderRadius: 20,
-    margin: 5,
+    marginVertical: 4,
+    alignItems: "center",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 3,
+    elevation: 3,
   },
 
   contBtnText: {
     color: "#fff",
     fontWeight: "bold",
+    fontSize: 15,
+  },
+
+  countryScrollContainer: {
+    paddingVertical: 5,
   },
 
   countryBtn: {
@@ -232,11 +308,17 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     paddingHorizontal: 16,
     borderRadius: 20,
-    margin: 5,
+    marginRight: 8,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 3,
+    elevation: 3,
   },
 
   countryBtnText: {
     color: "#fff",
     fontWeight: "bold",
+    fontSize: 14,
   },
 });
