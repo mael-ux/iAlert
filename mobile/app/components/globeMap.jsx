@@ -2,10 +2,9 @@ import React, { useState, useEffect } from "react";
 import { View, StyleSheet, ActivityIndicator, Modal, Text, Image, TouchableOpacity, ScrollView } from "react-native";
 import { WebView } from "react-native-webview";
 import { Asset } from "expo-asset";
-import * as FileSystem from "expo-file-system/legacy"; // Using legacy as we discussed
+import * as FileSystem from "expo-file-system/legacy"; 
 import { COLORS } from "../../constants/colors";
 
-// These paths are correct
 const threeJsAsset = require("../../assets/js/three.txt");
 const threeGlobeAsset = require("../../assets/js/three-globe.txt");
 // --- ICON ASSETS (local) ---
@@ -44,30 +43,41 @@ export default function GlobeMap({ points = null, style }) {
         const threeJsCode = await FileSystem.readAsStringAsync(threeJsLocalUri);
         const threeGlobeCode = await FileSystem.readAsStringAsync(threeGlobeLocalUri);
 
-        // 2) Convert local icon images to base64 data URLs to send into WebView
-        //    This allows the web content to use local images (no external hosting).
-        const iconDataUrls = {};
-        for (const [key, moduleRef] of Object.entries(iconFiles)) {
-          try {
-            const assetLocal = await Asset.fromModule(moduleRef).downloadAsync(); // ← AGREGADO
-            // read as base64
-            const b64 = await FileSystem.readAsStringAsync(assetLocal.localUri, { encoding: FileSystem.EncodingType.Base64 }); // ← AGREGADO
-            // create data URL (assume png or jpg by file extension)
-            const ext = assetLocal.localUri.split('.').pop().toLowerCase();
-            const mime = ext === 'jpg' || ext === 'jpeg' ? 'image/jpeg' : 'image/png';
-            iconDataUrls[key] = `data:${mime};base64,${b64}`; // ← AGREGADO
-          } catch (err) {
-            console.warn('Failed to load icon for', key, err);
-          }
-        }
-        setIconMap(iconDataUrls); // save to state in case RN needs it too // ← AGREGADO
+// 2) Convert local icon images to base64 data URLs to send into WebView
+//    This allows the web content to use local images (no external hosting).
+const iconDataUrls = {};
+for (const [key, moduleRef] of Object.entries(iconFiles)) {
+  try {
+    const assetLocal = await Asset.fromModule(moduleRef).downloadAsync(); // ← AGREGADO
+    // read as base64
+    const b64 = await FileSystem.readAsStringAsync(assetLocal.localUri, {
+      encoding: FileSystem.EncodingType.Base64
+    }); // ← AGREGADO
+    // create data URL (assume png or jpg by file extension)
+    const ext = assetLocal.localUri.split('.').pop().toLowerCase();
+    const mime =
+      ext === "jpg" || ext === "jpeg" ? "image/jpeg" : "image/png";
+    iconDataUrls[key] = `data:${mime};base64,${b64}`; // ← AGREGADO
+  } catch (err) {
+    console.warn("Failed to load icon for", key, err);
+  }
+}
 
-        // 3) Build HTML for WebView. We pass:
-        //    - three.js code
-        //    - three-globe code
-        //    - iconDataUrls as JSON
-        //    - categories to query from EONET
-        const categories = ["wildfires","floods","volcanoes","landslides","severeStorms"]; // ← CAMBIADO (categorías)
+setIconMap(iconDataUrls); // save to state in case RN needs it too // ← AGREGADO
+
+// 3) Build HTML for WebView. We pass:
+//    - three.js code
+//    - three-globe code
+//    - iconDataUrls as JSON
+//    - categories to query from EONET
+const categories = [
+  "wildfires",
+  "floods",
+  "volcanoes",
+  "landslides",
+  "severeStorms"
+]; // ← CAMBIADO (categorías)
+
         const html = `
           <!DOCTYPE html>
           <html>

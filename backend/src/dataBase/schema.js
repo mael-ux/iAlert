@@ -1,23 +1,46 @@
-import { pgTable, serial, text, timestamp, integer, date } from "drizzle-orm/pg-core";
+import { pgTable, serial, text, timestamp, integer, date, numeric, jsonb, unique, uuid} from "drizzle-orm/pg-core";
+
+export const weatherCacheTable = pgTable("weather_cache", {
+  id: serial("id").primaryKey(),
+  gridLat: numeric("grid_lat", { precision: 4, scale: 1 }).notNull(), 
+  gridLng: numeric("grid_lng", { precision: 4, scale: 1 }).notNull(), 
+  weatherData: jsonb("weather_data"), 
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => {
+  return {
+    uniqueGrid: unique("unique_grid").on(table.gridLat, table.gridLng),
+  };
+});
 
 export const interestZonesTable = pgTable("interest_zone", {
   id: serial("id").primaryKey(),
-  userId: text("user_id").notNull(),
-  zoneId: integer("zone_id").notNull(),
+  userId: text("user_id").notNull().references(() => usersTable.userId), 
   title: text("title"),
-  coordinates: text("coordinates").notNull(),
+  latitude: numeric("latitude", { precision: 10, scale: 6 }).notNull(),
+  longitude: numeric("longitude", { precision: 10, scale: 6 }).notNull(),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
-export const users = pgTable("users", {
-  userId: text("user_id").primaryKey(),
+export const usersTable = pgTable("users", {
+  userId: text("user_id").primaryKey(), 
+  name: text("name"),
+  email: text("email").notNull(), 
+  location: text("location"),
 });
 
-export const photoOfTheDay = pgTable("photo_of_the_day", {
+export const photoOfTheDayTable = pgTable("photo_of_the_day", {
   id: serial("id").primaryKey(),
   title: text("title").notNull(),
   credits: text("credits"),
   image: text("image").notNull(),
   description: text("description"),
   date: date("date").notNull(), 
+});
+
+export const disasterTypeTable = pgTable("disaster_type", {
+  typeId: integer("typeId").primaryKey(), 
+  title: text("title").notNull(),
+  description: text("description"),
+  averageRiskLevel: numeric("averageRiskLevel", { precision: 4, scale: 2 }), 
+  recommendations: text("recommendations"),
 });
