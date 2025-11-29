@@ -247,71 +247,153 @@ async def get_model_info():
         "features": ["Region", "Country"]
     }
 
+# Cache for EONET data (in-memory)
+_disasters_cache = {
+    "data": None,
+    "timestamp": None,
+    "ttl": 300  # 5 minutes cache
+}
+
 # Disasters proxy endpoint (bypasses mobile network restrictions)
 @app.get("/api/disasters")
-async def get_disasters(limit: int = 100):
+async def get_disasters(limit: int = 100, days: int = 30, force_refresh: bool = False):
     """
     Fetch active disasters from NASA EONET API
-    Acts as a proxy to bypass mobile network restrictions
+    Tries multiple API versions and endpoints with fallbacks
     """
+    from datetime import datetime, timedelta
     import urllib.request
     import json
     
-    try:
-        categories = [
-            "wildfires", "volcanoes", "severeStorms", "floods", 
-            "earthquakes", "landslides", "drought", "dustHaze",
-            "tempExtremes", "seaLakeIce", "snow", "waterColor", "manmade"
-        ]
-        
-        category_params = "&".join([f"category={c}" for c in categories])
-        url = f"https://eonet.gsfc.nasa.gov/api/v3/events?status=open&limit={limit}&{category_params}"
-        
-        print(f"📡 Fetching from EONET: {url}")
-        
-        with urllib.request.urlopen(url, timeout=30) as response:
-            data = json.loads(response.read().decode())
-            events = data.get("events", [])
+    global _disasters_cache
+    
+    # Check cache first (unless force refresh)
+    if not force_refresh and _disasters_cache["data"] is not None:
+        cache_age = (datetime.now() - _disasters_cache["timestamp"]).total_seconds()
+        if cache_age < _disasters_cache["ttl"]:
+            print(f"✅ Returning cached data ({int(cache_age)}s old)")
+            result = _disasters_cache["data"].copy()
+            result["cached"] = True
+            return result
+    
+    # Try multiple endpoints - v2.1 and v3 with different proxies
+    endpoints = [
+        # v2.1 API (simpler, might work better)
+        f"https://eonet.gsfc.nasa.gov/api/v2.1/events?status=open&limit={limit}&days={days}",
+        # v3 API (current)
+        f"https://eonet.gsfc.nasa.gov/api/v3/events?status=open&limit={limit}",
+        # v2.1 via CORS proxy
+        f"https://api.allorigins.win/raw?url=https://eonet.gsfc.nasa.gov/api/v2.1/events?status=open&limit={limit}&days={days}",
+        # v3 via CORS proxy
+        f"https://api.allorigins.win/raw?url=https://eonet.gsfc.nasa.gov/api/v3/events?status=open&limit={limit}",
+        # Another CORS proxy with v2.1
+        f"https://corsproxy.io/?https://eonet.gsfc.nasa.gov/api/v2.1/events?status=open&limit={limit}&days={days}"
+    ]
+    
+    last_error = None
+    
+    for url in endpoints:
+        try:
+            print(f"📡 Trying: {url[:80]}...")
             
-            print(f"✅ Got {len(events)} events from EONET")
+            req = urllib.request.Request(
+                url,
+                headers={
+                    'User-Agent': 'iAlert-DisasterMonitoring/1.0',
+                    'Accept': 'application/json'
+                }
+            )
             
-            # Process events
-            processed_events = []
-            for evt in events:
-                if not evt.get("geometry") or len(evt["geometry"]) == 0:
-                    continue
+            with urllib.request.urlopen(req, timeout=30) as response:
+                data = json.loads(response.read().decode())
                 
-                geom = evt["geometry"][-1]
-                coords = geom.get("coordinates", [])
+                # Handle wrapped responses from proxies
+                if "contents" in data:
+                    data = json.loads(data["contents"])
                 
-                if len(coords) < 2:
-                    continue
+                events = data.get("events", [])
                 
-                processed_events.append({
-                    "id": evt.get("id"),
-                    "title": evt.get("title"),
-                    "description": evt.get("description", ""),
-                    "category": evt["categories"][0]["id"] if evt.get("categories") else "unknown",
-                    "lat": coords[1],
-                    "lng": coords[0],
-                    "date": geom.get("date"),
-                    "link": evt["sources"][0]["url"] if evt.get("sources") else None
-                })
-            
-            print(f"✅ Returning {len(processed_events)} processed events")
-            
-            return {
-                "status": "ok",
-                "count": len(processed_events),
-                "events": processed_events
-            }
-            
-    except Exception as e:
-        print(f"❌ Error fetching disasters: {str(e)}")
-        raise HTTPException(
-            status_code=500,
-            detail=f"Failed to fetch disasters: {str(e)}"
-        )
+                print(f"✅ Got {len(events)} events from {url[:40]}...")
+                
+                # Process events - handle both v2.1 and v3 formats
+                processed_events = []
+                for evt in events:
+                    # v3 uses "geometry", v2.1 uses "geometries"
+                    geometries = evt.get("geometry") or evt.get("geometries")
+                    
+                    if not geometries or len(geometries) == 0:
+                        continue
+                    
+                    # Get latest geometry
+                    geom = geometries[-1] if isinstance(geometries, list) else geometries
+                    
+                    # v3: coordinates array, v2.1: coordinates in different format
+                    coords = geom.get("coordinates", [])
+                    
+                    if len(coords) < 2:
+                        continue
+                    
+                    # Extract category
+                    categories = evt.get("categories", [])
+                    category = "unknown"
+                    if categories and len(categories) > 0:
+                        # v3: categories[0]["id"], v2.1: categories[0]["id"] (same)
+                        cat_obj = categories[0]
+                        category = cat_obj.get("id") if isinstance(cat_obj, dict) else str(cat_obj)
+                    
+                    # Extract source link
+                    sources = evt.get("sources", [])
+                    link = None
+                    if sources and len(sources) > 0:
+                        source_obj = sources[0]
+                        link = source_obj.get("url") if isinstance(source_obj, dict) else None
+                    
+                    processed_events.append({
+                        "id": evt.get("id"),
+                        "title": evt.get("title"),
+                        "description": evt.get("description", ""),
+                        "category": category,
+                        "lat": coords[1],
+                        "lng": coords[0],
+                        "date": geom.get("date"),
+                        "link": link or evt.get("link")
+                    })
+                
+                result = {
+                    "status": "ok",
+                    "count": len(processed_events),
+                    "events": processed_events,
+                    "source": "eonet",
+                    "api_version": "v2.1" if "v2.1" in url else "v3",
+                    "cached": False
+                }
+                
+                # Cache the result
+                _disasters_cache["data"] = result
+                _disasters_cache["timestamp"] = datetime.now()
+                
+                print(f"✅ Returning {len(processed_events)} processed events")
+                return result
+                
+        except Exception as e:
+            last_error = str(e)
+            print(f"❌ Failed: {last_error}")
+            continue
+    
+    # All endpoints failed - return cache if available
+    if _disasters_cache["data"] is not None:
+        print(f"⚠️ All endpoints failed, returning stale cache")
+        result = _disasters_cache["data"].copy()
+        result["cached"] = True
+        cache_age = int((datetime.now() - _disasters_cache["timestamp"]).total_seconds())
+        result["cache_age_seconds"] = cache_age
+        return result
+    
+    # No cache and all endpoints failed
+    raise HTTPException(
+        status_code=503,
+        detail=f"Unable to fetch disasters from any source. Last error: {last_error}"
+    )
 
 # Error handlers
 @app.exception_handler(404)
