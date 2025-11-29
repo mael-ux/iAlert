@@ -39,7 +39,7 @@ export default function UserScreen() {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>App Settings</Text>
           <SettingsButton
-            href="/zones" // We will create this page next
+            href="/zones" 
             title="Manage Zones of Interest"
             icon="map-outline"
           />
@@ -75,8 +75,16 @@ export default function UserScreen() {
           </Text>
           {/* --------------------------------- */}
         </TouchableOpacity>
+
+        <SettingsButton
+          href="/alert-settings"
+          title="Configurar Alertas de Desastre"
+          icon="notifications-outline"
+        />
       </ScrollView>
     </View>
+    // Agregar este botón en la sección "App Settings":
+
   );
 }
 

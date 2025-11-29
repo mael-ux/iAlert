@@ -3,6 +3,8 @@ import express from "express";
 import { eq, and, desc, sql } from "drizzle-orm";
 import { ENV } from "./config/env.js";
 import { db } from "./config/db.js";
+import alertsRouter from "./routes/alerts.routes.js";
+import { eonetCheckJob } from './config/eonetCron.js';
 import {
   interestZonesTable,
   photoOfTheDayTable,
@@ -269,6 +271,14 @@ app.post("/api/get-weather", async (req, res) => {
     res.status(500).json({ error: "Internal server error" });
   }
 });
+if (ENV.NODE_ENV === "production") {
+  console.log("Starting cron jobs...");
+  healthCheckJob.start();
+  photoJob.start();
+  eonetCheckJob.start(); // ← NUEVO
+}
+
+app.use("/api/alerts", alertsRouter);
 
 app.listen(PORT, "0.0.0.0", () => {
   console.log(`Server is running on PORT: ${PORT} and listening on all interfaces`);
