@@ -1,11 +1,11 @@
-// mobile/app/_layout.jsx
 import React, { useEffect } from "react";
 import { ClerkProvider, SignedIn, SignedOut } from "@clerk/clerk-expo";
 import { Slot, useRouter } from "expo-router";
 import * as SecureStore from "expo-secure-store";
-import { View, ActivityIndicator } from "react-native";
-import { useAuth } from "@clerk/clerk-expo";
-import { useAlertPolling } from "./hooks/useAlertPolling"; 
+import { ThemeProvider } from "./ThemeContext";
+// import { useAlertPolling } from "./hooks/useAlertPolling";
+
+const CLERK_PUBLISHABLE_KEY = process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY;
 
 const tokenCache = {
   async getToken(key) {
@@ -24,51 +24,33 @@ const tokenCache = {
   },
 };
 
-const CLERK_PUBLISHABLE_KEY = process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY;
-
-if (!CLERK_PUBLISHABLE_KEY) {
-  throw new Error("Missing Clerk Publishable Key");
-}
-
 function InitialLayout() {
-  const { isLoaded, isSignedIn } = useAuth();
   const router = useRouter();
   
-  // ← NUEVO: Activar polling de alertas
-  const { startPolling, stopPolling } = useAlertPolling();
-
-  useEffect(() => {
-    if (!isLoaded) return;
-
-    if (isSignedIn) {
-      router.replace("/");
-      // Iniciar polling cuando el usuario esté autenticado
-      startPolling();
-    } else {
-      router.replace("/(auth)/sign-in");
-      // Detener polling si el usuario cierra sesión
-      stopPolling();
-    }
-  }, [isLoaded, isSignedIn]);
-
-  if (!isLoaded) {
-    return (
-      <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
-        <ActivityIndicator size="large" />
-      </View>
-    );
-  }
+  // ⚠️ ALERT POLLING TEMPORARILY DISABLED
+  // Reason: Backend /api/alerts/check-new endpoint doesn't exist yet
+  // Will re-enable after implementing database user sync
+  // useAlertPolling();
 
   return <Slot />;
 }
 
 export default function RootLayout() {
+  if (!CLERK_PUBLISHABLE_KEY) {
+    throw new Error("Missing Clerk Publishable Key");
+  }
+
   return (
-    <ClerkProvider
-      tokenCache={tokenCache}
-      publishableKey={CLERK_PUBLISHABLE_KEY}
-    >
-      <InitialLayout />
+    <ClerkProvider tokenCache={tokenCache} publishableKey={CLERK_PUBLISHABLE_KEY}>
+      {/* ✅ CRITICAL FIX: ThemeProvider must wrap EVERYTHING including SignedIn/SignedOut */}
+      <ThemeProvider>
+        <SignedIn>
+          <InitialLayout />
+        </SignedIn>
+        <SignedOut>
+          <Slot />
+        </SignedOut>
+      </ThemeProvider>
     </ClerkProvider>
   );
 }
