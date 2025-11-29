@@ -8,11 +8,7 @@ import {
   ActivityIndicator,
 } from "react-native";
 import { COLORS } from "../../constants/colors";
-
-// ⚠️ IMPORTANT: Update this URL after deploying to Render
-// Development: "http://10.0.2.2:8000/api" (Android) or "http://localhost:8000/api" (iOS)
-// Production: "https://ialert-ai-service.onrender.com/api"
-const AI_API_URL = "https://ialert-ai-service.onrender.com/api";
+import { AI_API_URL } from "../../constants/api";
 
 export default function ChatBot() {
   const [messages, setMessages] = useState([
@@ -49,7 +45,7 @@ export default function ChatBot() {
     setIsLoading(true);
 
     try {
-      const response = await fetch(`${AI_API_URL}/countries/${cont}`);
+      const response = await fetch(`${AI_API_URL}/api/countries/${cont}`);
       
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
@@ -95,7 +91,7 @@ export default function ChatBot() {
 
     // Call AI prediction endpoint
     try {
-      const response = await fetch(`${AI_API_URL}/predict-disaster`, {
+      const response = await fetch(`${AI_API_URL}/api/predict-disaster`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ region, country: p }),
