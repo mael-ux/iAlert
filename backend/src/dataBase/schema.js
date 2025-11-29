@@ -1,4 +1,4 @@
-import { pgTable, serial, text, timestamp, integer, date, numeric, jsonb, unique, uuid} from "drizzle-orm/pg-core";
+import { pgTable, serial, text, timestamp, integer, date, numeric, jsonb, unique, uuid, boolean} from "drizzle-orm/pg-core";
 
 export const weatherCacheTable = pgTable("weather_cache", {
   id: serial("id").primaryKey(),
@@ -43,4 +43,18 @@ export const disasterTypeTable = pgTable("disaster_type", {
   description: text("description"),
   averageRiskLevel: numeric("averageRiskLevel", { precision: 4, scale: 2 }), 
   recommendations: text("recommendations"),
+});
+
+export const userAlertConfigTable = pgTable("user_alert_config", {
+  id: serial("id").primaryKey(),
+  userId: text("user_id").notNull().references(() => usersTable.userId, { onDelete: 'cascade' }),
+  selectedTypes: jsonb("selected_types").default(['wildfires', 'volcanoes', 'severeStorms', 'floods', 'earthquakes']),
+  vibrateEnabled: boolean("vibrate_enabled").default(true),
+  soundEnabled: boolean("sound_enabled").default(true),
+  flashEnabled: boolean("flash_enabled").default(false),
+  soundLevel: integer("sound_level").default(80),
+  notifyCurrentLocation: boolean("notify_current_location").default(true),
+  notifyOnlySelectedZones: boolean("notify_only_selected_zones").default(false),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
 });

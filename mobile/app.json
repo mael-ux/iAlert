@@ -8,6 +8,12 @@
     "scheme": "mobile",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
+    "notification": {
+      "icon": "./assets/images/icon.png",
+      "color": "#740000",
+      "androidMode": "default",
+      "androidCollapsedTitle": "iAlert"
+    },
     "ios": {
       "supportsTablet": true,
       "infoPlist": {
@@ -44,6 +50,14 @@
       "favicon": "./assets/images/favicon.png"
     },
     "plugins": [
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/images/icon.png",
+          "color": "#740000",
+          "sounds": ["./assets/sounds/alert.wav"]
+        }
+      ],
       "expo-router",
       [
         "expo-splash-screen",

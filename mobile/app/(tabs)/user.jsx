@@ -1,11 +1,12 @@
-import React, { useEffect } from "react";
+// mobile/app/(tabs)/user.jsx - MERGED VERSION
+import React from "react";
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
 import { useAuth, useUser } from '@clerk/clerk-expo';
 import { Ionicons } from '@expo/vector-icons';
 import { Link } from 'expo-router';
 import { COLORS } from '../../constants/colors';
 
-// This is a wrapper for a navigation button
+// Reusable navigation button component
 const SettingsButton = ({ href, title, icon }) => (
   <Link href={href} asChild>
     <TouchableOpacity style={styles.button}>
@@ -20,7 +21,6 @@ export default function UserScreen() {
   const { signOut, isSignedIn } = useAuth();
   const { user } = useUser();
 
-  // --- THIS FUNCTION WAS MISSING ---
   const handleSignOut = async () => {
     if (!isSignedIn) return;
     try {
@@ -29,51 +29,95 @@ export default function UserScreen() {
       console.error('Error signing out:', err);
     }
   };
-  // ---------------------------------
 
   return (
     <View style={styles.container}>
       <ScrollView contentContainerStyle={styles.scrollContent}>
         
-        {/* 1. Our Custom "Manage Zones" Button */}
+        {/* App Settings Section */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>App Settings</Text>
+          
           <SettingsButton
-            href="/zones" // We will create this page next
+            href="/zones"
             title="Manage Zones of Interest"
             icon="map-outline"
           />
+          
+          <SettingsButton
+            href="/alert-settings"
+            title="Configurar Alertas de Desastre"
+            icon="notifications-outline"
+          />
+          
+          <SettingsButton
+            href="/idioma"
+            title="Language"
+            icon="language-outline"
+          />
+          
+          <SettingsButton
+            href="/personalizar"
+            title="Customize App"
+            icon="color-palette-outline"
+          />
         </View>
 
-        {/* 2. User Profile Info */}
+        {/* NASA & Support Section */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>More</Text>
+          
+          <SettingsButton
+            href="/Nasa"
+            title="NASA Gallery"
+            icon="planet-outline"
+          />
+          
+          <SettingsButton
+            href="/dudas"
+            title="Preguntas Frecuentes (FAQ)"
+            icon="help-circle-outline"
+          />
+          
+          <SettingsButton
+            href="/soporte"
+            title="Soporte"
+            icon="mail-outline"
+          />
+        </View>
+
+        {/* Account Section */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Account</Text>
-          <View style={styles.profileCard}>
-            <View style={styles.profileInfo}>
-              <Ionicons name="person-circle-outline" size={48} color={COLORS.primary} />
-              <View style={styles.profileDetails}>
-                <Text style={styles.profileName}>
-                  {user?.firstName || user?.fullName || 'User'}
-                </Text>
-                <Text style={styles.profileEmail}>
-                  {user?.primaryEmailAddress?.emailAddress || 'No email'}
-                </Text>
+          
+          {/* Profile Card - Tappable to edit */}
+          <Link href="/editusuario" asChild>
+            <TouchableOpacity style={styles.profileCard}>
+              <View style={styles.profileInfo}>
+                <Ionicons name="person-circle-outline" size={48} color={COLORS.primary} />
+                <View style={styles.profileDetails}>
+                  <Text style={styles.profileName}>
+                    {user?.firstName || user?.fullName || 'User'}
+                  </Text>
+                  <Text style={styles.profileEmail}>
+                    {user?.primaryEmailAddress?.emailAddress || 'No email'}
+                  </Text>
+                </View>
+                <Ionicons name="chevron-forward-outline" size={20} color={COLORS.textLight} />
               </View>
-            </View>
-          </View>
+            </TouchableOpacity>
+          </Link>
         </View>
 
-        {/* 3. Our Custom "Sign Out" Button */}
+        {/* Sign Out Button */}
         <TouchableOpacity
           style={[styles.button, styles.signOutButton]}
           onPress={handleSignOut}
         >
-          {/* --- THIS CONTENT WAS MISSING --- */}
           <Ionicons name="log-out-outline" size={24} color={COLORS.primary} />
           <Text style={[styles.buttonText, styles.signOutText]}>
             Sign Out
           </Text>
-          {/* --------------------------------- */}
         </TouchableOpacity>
       </ScrollView>
     </View>
@@ -83,7 +127,7 @@ export default function UserScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: COLORS.background, // Use your theme color
+    backgroundColor: COLORS.background,
   },
   scrollContent: {
     paddingTop: 60,
@@ -115,11 +159,12 @@ const styles = StyleSheet.create({
     color: COLORS.text,
     fontSize: 16,
     marginLeft: 16,
-    flex: 1, // Pushes chevron to the end
+    flex: 1,
   },
   signOutButton: {
     backgroundColor: COLORS.card,
     borderColor: COLORS.primary,
+    marginTop: 12,
   },
   signOutText: {
     color: COLORS.primary,
