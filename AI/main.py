@@ -254,7 +254,8 @@ async def get_disasters(limit: int = 100):
     Fetch active disasters from NASA EONET API
     Acts as a proxy to bypass mobile network restrictions
     """
-    import httpx
+    import urllib.request
+    import json
     
     try:
         categories = [
@@ -266,14 +267,13 @@ async def get_disasters(limit: int = 100):
         category_params = "&".join([f"category={c}" for c in categories])
         url = f"https://eonet.gsfc.nasa.gov/api/v3/events?status=open&limit={limit}&{category_params}"
         
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            response = await client.get(url)
-            
-            if response.status_code != 200:
-                raise HTTPException(status_code=502, detail="EONET API unavailable")
-            
-            data = response.json()
+        print(f"📡 Fetching from EONET: {url}")
+        
+        with urllib.request.urlopen(url, timeout=30) as response:
+            data = json.loads(response.read().decode())
             events = data.get("events", [])
+            
+            print(f"✅ Got {len(events)} events from EONET")
             
             # Process events
             processed_events = []
@@ -298,6 +298,8 @@ async def get_disasters(limit: int = 100):
                     "link": evt["sources"][0]["url"] if evt.get("sources") else None
                 })
             
+            print(f"✅ Returning {len(processed_events)} processed events")
+            
             return {
                 "status": "ok",
                 "count": len(processed_events),
@@ -305,6 +307,7 @@ async def get_disasters(limit: int = 100):
             }
             
     except Exception as e:
+        print(f"❌ Error fetching disasters: {str(e)}")
         raise HTTPException(
             status_code=500,
             detail=f"Failed to fetch disasters: {str(e)}"

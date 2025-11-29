@@ -5,7 +5,7 @@ import { View, StyleSheet, ActivityIndicator, Modal, Text, TouchableOpacity, Scr
 import { WebView } from "react-native-webview";
 import { COLORS } from "../../constants/colors";
 import { Ionicons } from "@expo/vector-icons";
-import { AI_API_URL } from "../../constants/ai-api";
+import { AI_API_URL } from "../../constants/api";
 
 const DISASTER_INFO = {
   wildfires: { name: "Wildfire", color: "#ff4500", emoji: "🔥" },
