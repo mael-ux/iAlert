@@ -1,6 +1,7 @@
 import express from "express";
 import { eq, and, sql } from "drizzle-orm";
 import { ENV } from "./config/env.js";
+import webhooksRouter from "./routes/webhooks.js";
 import { db } from "./config/db.js";
 import {
   interestZonesTable,
@@ -142,9 +143,16 @@ app.get("/api/interestZone/:userId", async (req, res) => {
 // =========================
 //    PHOTO OF THE DAY
 // =========================
+// REPLACE your /api/photoOfTheDay endpoint in server.js with this:
+
+// =========================
+//    PHOTO OF THE DAY
+// =========================
 app.get("/api/photoOfTheDay", async (req, res) => {
   try {
-    // FIXED: Random photo selection
+    console.log("📸 Fetching random photo from database...");
+    
+    // Get random photo
     const [randomPhoto] = await db
       .select()
       .from(photoOfTheDayTable)
@@ -152,7 +160,7 @@ app.get("/api/photoOfTheDay", async (req, res) => {
       .limit(1);
 
     if (!randomPhoto) {
-      console.log("No photo in DB, returning fallback");
+      console.log("⚠️ No photos found in database, using fallback");
       return res.status(200).json({
         title: "Horsehead Nebula",
         image: "https://apod.nasa.gov/apod/image/2301/Horsehead_Hubble_1225.jpg",
@@ -161,75 +169,25 @@ app.get("/api/photoOfTheDay", async (req, res) => {
       });
     }
 
+    console.log(`✅ Found photo: ${randomPhoto.title}`);
+    
     res.status(200).json({
       title: randomPhoto.title,
       image: randomPhoto.image,
-      description: randomPhoto.description,
-      credits: randomPhoto.credits,
+      description: randomPhoto.description || "",
+      credits: randomPhoto.credits || "",
     });
   } catch (error) {
-    console.log("Error fetching Photo of the Day", error);
+    console.error("❌ Error fetching Photo of the Day:", error.message);
+    console.error("Stack:", error.stack);
+    
+    // Return fallback on error
     res.status(200).json({
       title: "Horsehead Nebula",
       image: "https://apod.nasa.gov/apod/image/2301/Horsehead_Hubble_1225.jpg",
       description: "The Horsehead Nebula is one of the most identifiable nebulae in the sky.",
       credits: "NASA, ESA, Hubble Heritage Team",
     });
-  }
-});
-app.get("/api/photos", async (req, res) => {
-  try {
-    const allPhotos = await db
-      .select()
-      .from(photoOfTheDayTable)
-      .orderBy(sql`${photoOfTheDayTable.date} DESC`);
-
-    if (!allPhotos || allPhotos.length === 0) {
-      return res.status(200).json([]);
-    }
-
-    // Map to match frontend expectations
-    const photos = allPhotos.map(photo => ({
-      id: photo.id,
-      title: photo.title,
-      url: photo.image,
-      description: photo.description,
-      credits: photo.credits,
-      date: photo.date
-    }));
-
-    res.status(200).json(photos);
-  } catch (error) {
-    console.log("Error fetching all photos:", error);
-    res.status(500).json({ error: "Something went wrong" });
-  }
-});
-
-app.post("/api/photoOfTheDay", async (req, res) => {
-  try {
-    const { title, credits, image, description } = req.body;
-
-    if (!title || !image) {
-      return res.status(400).json({ error: "Missing required fields (title, image)" });
-    }
-
-    const today = new Date().toISOString().split('T')[0];
-
-    const newPhotoOfTheDay = await db
-      .insert(photoOfTheDayTable)
-      .values({
-        title,
-        credits: credits || "NASA",
-        image,
-        description: description || "",
-        date: today,
-      })
-      .returning();
-
-    res.status(201).json(newPhotoOfTheDay[0]);
-  } catch (error) {
-    console.log("Error adding Photo of the Day", error);
-    res.status(500).json({ error: "Something went wrong" });
   }
 });
 
@@ -312,6 +270,7 @@ app.post("/api/get-weather", async (req, res) => {
     res.status(500).json({ error: "Internal server error" });
   }
 });
+app.use("/api/webhooks", express.raw({ type: "application/json" }), webhooksRouter);
 
 // =========================
 //    ALERTS ROUTER
