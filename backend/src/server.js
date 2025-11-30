@@ -177,6 +177,33 @@ app.get("/api/photoOfTheDay", async (req, res) => {
     });
   }
 });
+app.get("/api/photos", async (req, res) => {
+  try {
+    const allPhotos = await db
+      .select()
+      .from(photoOfTheDayTable)
+      .orderBy(sql`${photoOfTheDayTable.date} DESC`);
+
+    if (!allPhotos || allPhotos.length === 0) {
+      return res.status(200).json([]);
+    }
+
+    // Map to match frontend expectations
+    const photos = allPhotos.map(photo => ({
+      id: photo.id,
+      title: photo.title,
+      url: photo.image,
+      description: photo.description,
+      credits: photo.credits,
+      date: photo.date
+    }));
+
+    res.status(200).json(photos);
+  } catch (error) {
+    console.log("Error fetching all photos:", error);
+    res.status(500).json({ error: "Something went wrong" });
+  }
+});
 
 app.post("/api/photoOfTheDay", async (req, res) => {
   try {

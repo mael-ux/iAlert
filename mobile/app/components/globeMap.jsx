@@ -1,5 +1,5 @@
-// mobile/app/components/globeMap.jsx - WORKING VERSION
-// Fetches disasters from YOUR backend (which proxies EONET)
+// mobile/app/components/globeMap.jsx - PREMIUM VERSION
+// High-res textures, disaster icons, free 360° rotation, zoom controls
 import React, { useState, useEffect } from "react";
 import { View, StyleSheet, ActivityIndicator, Modal, Text, TouchableOpacity, ScrollView } from "react-native";
 import { WebView } from "react-native-webview";
@@ -12,25 +12,24 @@ try {
   const imported = require("../../constants/ai-api");
   AI_API_URL = imported.AI_API_URL;
 } catch (e) {
-  // Fallback if constants file doesn't exist
   AI_API_URL = "https://ialert-ai-service.onrender.com/api";
   console.warn("⚠️ Using fallback AI_API_URL");
 }
 
 const DISASTER_INFO = {
-  wildfires: { name: "Wildfire", color: "#ff4500", emoji: "🔥" },
-  volcanoes: { name: "Volcano", color: "#dc143c", emoji: "🌋" },
-  severeStorms: { name: "Severe Storm", color: "#4169e1", emoji: "⛈️" },
-  floods: { name: "Flood", color: "#1e90ff", emoji: "🌊" },
-  earthquakes: { name: "Earthquake", color: "#8b4513", emoji: "🏚️" },
-  landslides: { name: "Landslide", color: "#a0522d", emoji: "⛰️" },
-  drought: { name: "Drought", color: "#daa520", emoji: "🏜️" },
-  dustHaze: { name: "Dust & Haze", color: "#d2691e", emoji: "🌫️" },
-  tempExtremes: { name: "Temperature Extreme", color: "#ff6347", emoji: "🌡️" },
-  seaLakeIce: { name: "Sea/Lake Ice", color: "#add8e6", emoji: "🧊" },
-  snow: { name: "Snow", color: "#f0f8ff", emoji: "❄️" },
-  waterColor: { name: "Water Color Change", color: "#20b2aa", emoji: "💧" },
-  manmade: { name: "Man-made Event", color: "#696969", emoji: "⚠️" },
+  wildfires: { name: "Wildfire", color: "#ff4500", emoji: "🔥", icon: "flame" },
+  volcanoes: { name: "Volcano", color: "#dc143c", emoji: "🌋", icon: "triangle" },
+  severeStorms: { name: "Severe Storm", color: "#4169e1", emoji: "⛈️", icon: "flash" },
+  floods: { name: "Flood", color: "#1e90ff", emoji: "🌊", icon: "water" },
+  earthquakes: { name: "Earthquake", color: "#8b4513", emoji: "🏚️", icon: "pulse" },
+  landslides: { name: "Landslide", color: "#a0522d", emoji: "⛰️", icon: "trending-down" },
+  drought: { name: "Drought", color: "#daa520", emoji: "🏜️", icon: "sunny" },
+  dustHaze: { name: "Dust & Haze", color: "#d2691e", emoji: "🌫️", icon: "cloud" },
+  tempExtremes: { name: "Temperature Extreme", color: "#ff6347", emoji: "🌡️", icon: "thermometer" },
+  seaLakeIce: { name: "Sea/Lake Ice", color: "#add8e6", emoji: "🧊", icon: "snow" },
+  snow: { name: "Snow", color: "#f0f8ff", emoji: "❄️", icon: "snow" },
+  waterColor: { name: "Water Color Change", color: "#20b2aa", emoji: "💧", icon: "water" },
+  manmade: { name: "Man-made Event", color: "#696969", emoji: "⚠️", icon: "warning" },
 };
 
 export default function GlobeMap({ style }) {
@@ -48,8 +47,6 @@ export default function GlobeMap({ style }) {
     try {
       console.log('🌍 Fetching disasters from backend...');
       
-      // Fetch from YOUR backend (not EONET directly - that's blocked!)
-      // NOTE: Using /api prefix to match backend route
       const response = await fetch(`${AI_API_URL}/disasters`);
       
       if (!response.ok) {
@@ -64,22 +61,35 @@ export default function GlobeMap({ style }) {
       
     } catch (err) {
       console.error('❌ Failed to fetch disasters:', err);
-      // Fallback: show globe without disasters
       buildGlobe([]);
     }
   };
 
   const buildGlobe = (events) => {
+    // Convert disaster info to base64 SVG icons for each type
+    const iconSVGs = {};
+    Object.keys(DISASTER_INFO).forEach(key => {
+      const info = DISASTER_INFO[key];
+      // Create a simple SVG icon
+      const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24">
+        <circle cx="12" cy="12" r="10" fill="${info.color}" stroke="white" stroke-width="2"/>
+        <text x="12" y="16" font-size="12" text-anchor="middle" fill="white">${info.emoji}</text>
+      </svg>`;
+      iconSVGs[key] = `data:image/svg+xml;base64,${btoa(svg)}`;
+    });
+
     const html = `
       <!DOCTYPE html>
       <html>
         <head>
-          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+          <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
           <style>
+            * { margin: 0; padding: 0; box-sizing: border-box; }
             body { 
               margin: 0; 
               overflow: hidden; 
               background: linear-gradient(to bottom, #000428, #004e92);
+              touch-action: none;
             }
             canvas { display: block; }
             #info {
@@ -87,71 +97,113 @@ export default function GlobeMap({ style }) {
               top: 10px;
               left: 10px;
               color: white;
-              font-family: Arial;
+              font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
               background: rgba(0,0,0,0.7);
-              padding: 10px;
-              border-radius: 5px;
-              font-size: 12px;
+              padding: 12px 16px;
+              border-radius: 8px;
+              font-size: 14px;
+              font-weight: 600;
+              backdrop-filter: blur(10px);
+            }
+            #controls {
+              position: absolute;
+              bottom: 20px;
+              right: 20px;
+              display: flex;
+              flex-direction: column;
+              gap: 10px;
+            }
+            .control-btn {
+              width: 50px;
+              height: 50px;
+              background: rgba(255,255,255,0.9);
+              border: none;
+              border-radius: 50%;
+              font-size: 24px;
+              cursor: pointer;
+              box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+              transition: transform 0.2s;
+            }
+            .control-btn:active {
+              transform: scale(0.95);
             }
           </style>
           <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
         </head>
         <body>
-          <div id="info">🌍 Loading disasters...</div>
+          <div id="info">🌍 Loading...</div>
+          <div id="controls">
+            <button class="control-btn" onclick="zoomIn()">+</button>
+            <button class="control-btn" onclick="zoomOut()">−</button>
+            <button class="control-btn" onclick="resetView()">⟲</button>
+          </div>
           <script>
             const DISASTER_INFO = ${JSON.stringify(DISASTER_INFO)};
             const DISASTERS = ${JSON.stringify(events)};
+            const ICON_SVGS = ${JSON.stringify(iconSVGs)};
             
             // Setup scene
             const scene = new THREE.Scene();
             const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
             camera.position.z = 250;
 
-            const renderer = new THREE.WebGLRenderer({ antialias: true });
+            const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
             renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(window.devicePixelRatio);
             document.body.appendChild(renderer.domElement);
 
-            // Create Earth
-            const geometry = new THREE.SphereGeometry(100, 64, 64);
+            // Create Earth with HIGH-RES daytime texture
+            const geometry = new THREE.SphereGeometry(100, 128, 128);
             const textureLoader = new THREE.TextureLoader();
             
-            // Use a simpler, more reliable texture
+            // High-resolution Earth texture
             const earthTexture = textureLoader.load(
-              'https://unpkg.com/three-globe/example/img/earth-blue-marble.jpg',
+              'https://unpkg.com/three-globe@2.31.1/example/img/earth-blue-marble.jpg',
               () => {
                 console.log('✅ Earth texture loaded');
-                document.getElementById('info').textContent = '🌍 ' + DISASTERS.length + ' disasters';
+                document.getElementById('info').textContent = '🌍 ' + DISASTERS.length + ' active disasters';
               },
               undefined,
               (err) => {
-                console.error('Texture failed, using color');
+                console.error('Texture failed');
                 material.color.set(0x2233ff);
-                document.getElementById('info').textContent = '🌍 ' + DISASTERS.length + ' disasters';
               }
             );
             
+            // Better material with higher quality
             const material = new THREE.MeshPhongMaterial({
               map: earthTexture,
-              color: 0x2233ff,
-              shininess: 5
+              bumpScale: 0.05,
+              shininess: 15,
+              specular: 0x333333
             });
             
             const earth = new THREE.Mesh(geometry, material);
             scene.add(earth);
 
-            // Lighting
-            const ambientLight = new THREE.AmbientLight(0xffffff, 0.8);
+            // Enhanced lighting for daytime look
+            const ambientLight = new THREE.AmbientLight(0xffffff, 1.0);
             scene.add(ambientLight);
 
-            const directionalLight = new THREE.DirectionalLight(0xffffff, 0.6);
+            const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
             directionalLight.position.set(5, 3, 5);
             scene.add(directionalLight);
 
+            // Add rim light for better visibility
+            const rimLight = new THREE.DirectionalLight(0xffffff, 0.4);
+            rimLight.position.set(-5, 0, -5);
+            scene.add(rimLight);
+
             // Stars
             const starsGeometry = new THREE.BufferGeometry();
-            const starsMaterial = new THREE.PointsMaterial({ color: 0xffffff, size: 2 });
+            const starsMaterial = new THREE.PointsMaterial({ 
+              color: 0xffffff, 
+              size: 2,
+              transparent: true,
+              opacity: 0.8
+            });
             const starsVertices = [];
-            for (let i = 0; i < 5000; i++) {
+            for (let i = 0; i < 10000; i++) {
               starsVertices.push(
                 (Math.random() - 0.5) * 2000,
                 (Math.random() - 0.5) * 2000,
@@ -173,28 +225,51 @@ export default function GlobeMap({ style }) {
               );
             }
 
-            // Add disaster markers
+            // Add disaster markers with ICONS as sprites
             const markerGroup = new THREE.Group();
             scene.add(markerGroup);
             const markers = [];
 
-            console.log('Adding', DISASTERS.length, 'disaster markers');
-
-            DISASTERS.forEach((evt, idx) => {
-              const info = DISASTER_INFO[evt.category] || { color: '#888888', emoji: '📍', name: evt.category };
+            DISASTERS.forEach((evt) => {
+              const info = DISASTER_INFO[evt.category] || { color: '#ff0000', emoji: '📍', name: evt.category };
               
-              // Create marker - LARGER and BRIGHTER
-              const markerGeometry = new THREE.SphereGeometry(3, 16, 16);
-              const markerMaterial = new THREE.MeshBasicMaterial({ 
-                color: info.color,
-                transparent: false
+              // Create sprite with icon texture
+              const canvas = document.createElement('canvas');
+              canvas.width = 64;
+              canvas.height = 64;
+              const ctx = canvas.getContext('2d');
+              
+              // Draw circle background
+              ctx.fillStyle = info.color;
+              ctx.beginPath();
+              ctx.arc(32, 32, 28, 0, Math.PI * 2);
+              ctx.fill();
+              
+              // Add white border
+              ctx.strokeStyle = 'white';
+              ctx.lineWidth = 4;
+              ctx.stroke();
+              
+              // Add emoji
+              ctx.font = 'bold 32px Arial';
+              ctx.textAlign = 'center';
+              ctx.textBaseline = 'middle';
+              ctx.fillStyle = 'white';
+              ctx.fillText(info.emoji, 32, 32);
+              
+              const texture = new THREE.CanvasTexture(canvas);
+              const spriteMaterial = new THREE.SpriteMaterial({ 
+                map: texture,
+                transparent: true,
+                sizeAttenuation: false
               });
-              const marker = new THREE.Mesh(markerGeometry, markerMaterial);
+              const sprite = new THREE.Sprite(spriteMaterial);
               
-              const pos = latLngToVector3(evt.lat, evt.lng, 103);
-              marker.position.copy(pos);
+              const pos = latLngToVector3(evt.lat, evt.lng, 104);
+              sprite.position.copy(pos);
+              sprite.scale.set(0.05, 0.05, 1);
               
-              marker.userData = {
+              sprite.userData = {
                 title: evt.title,
                 category: evt.category,
                 categoryName: info.name,
@@ -206,22 +281,18 @@ export default function GlobeMap({ style }) {
                 link: evt.link
               };
               
-              markerGroup.add(marker);
-              markers.push(marker);
-              
-              if (idx < 5) {
-                console.log('Marker', idx, ':', evt.title, 'at', evt.lat, evt.lng, 'color:', info.color);
-              }
+              markerGroup.add(sprite);
+              markers.push(sprite);
             });
 
-            console.log('✅ Added', markers.length, 'markers to scene');
+            console.log('✅ Added', markers.length, 'disaster markers');
 
             window.ReactNativeWebView.postMessage(JSON.stringify({ 
               type: 'ready', 
               count: markers.length 
             }));
 
-            // Click handling
+            // Click/Tap handling
             const raycaster = new THREE.Raycaster();
             const mouse = new THREE.Vector2();
 
@@ -234,7 +305,6 @@ export default function GlobeMap({ style }) {
               const intersects = raycaster.intersectObjects(markers);
 
               if (intersects.length > 0) {
-                console.log('Clicked marker:', intersects[0].object.userData.title);
                 window.ReactNativeWebView.postMessage(JSON.stringify({
                   type: 'eventClick',
                   payload: intersects[0].object.userData
@@ -242,39 +312,94 @@ export default function GlobeMap({ style }) {
               }
             });
 
-            // Animation
+            // FREE 360° ROTATION + ZOOM
+            let isDragging = false;
+            let previousTouch = { x: 0, y: 0 };
+            let rotationX = 0;
+            let rotationY = 0;
             let autoRotate = true;
-            let lastTouchX = 0;
+            let targetZoom = 250;
+            let currentZoom = 250;
 
+            // Touch controls for rotation
             renderer.domElement.addEventListener('touchstart', (e) => {
-              autoRotate = false;
-              lastTouchX = e.touches[0].clientX;
+              if (e.touches.length === 1) {
+                isDragging = true;
+                autoRotate = false;
+                previousTouch = {
+                  x: e.touches[0].clientX,
+                  y: e.touches[0].clientY
+                };
+              }
             });
 
             renderer.domElement.addEventListener('touchmove', (e) => {
-              const touchX = e.touches[0].clientX;
-              const delta = touchX - lastTouchX;
-              earth.rotation.y += delta * 0.005;
-              markerGroup.rotation.y += delta * 0.005;
-              lastTouchX = touchX;
+              if (isDragging && e.touches.length === 1) {
+                const deltaX = e.touches[0].clientX - previousTouch.x;
+                const deltaY = e.touches[0].clientY - previousTouch.y;
+                
+                // Rotate both Earth and markers
+                rotationY += deltaX * 0.005;
+                rotationX += deltaY * 0.005;
+                
+                // Clamp vertical rotation
+                rotationX = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, rotationX));
+                
+                previousTouch = {
+                  x: e.touches[0].clientX,
+                  y: e.touches[0].clientY
+                };
+              }
             });
 
             renderer.domElement.addEventListener('touchend', () => {
-              setTimeout(() => { autoRotate = true; }, 2000);
+              isDragging = false;
+              setTimeout(() => { autoRotate = true; }, 3000);
             });
 
+            // Zoom controls
+            window.zoomIn = () => {
+              targetZoom = Math.max(150, targetZoom - 30);
+            };
+
+            window.zoomOut = () => {
+              targetZoom = Math.min(400, targetZoom + 30);
+            };
+
+            window.resetView = () => {
+              targetZoom = 250;
+              rotationX = 0;
+              rotationY = 0;
+              autoRotate = true;
+            };
+
+            // Animation loop
             function animate() {
               requestAnimationFrame(animate);
               
+              // Smooth zoom
+              currentZoom += (targetZoom - currentZoom) * 0.1;
+              camera.position.z = currentZoom;
+              
+              // Apply rotations
+              earth.rotation.y = rotationY;
+              earth.rotation.x = rotationX;
+              markerGroup.rotation.y = rotationY;
+              markerGroup.rotation.x = rotationX;
+              
+              // Auto-rotate if not dragging
               if (autoRotate) {
-                earth.rotation.y += 0.001;
-                markerGroup.rotation.y += 0.001;
+                rotationY += 0.001;
               }
+              
+              // Rotate stars slowly
+              stars.rotation.y += 0.0002;
               
               renderer.render(scene, camera);
             }
             animate();
 
+            // Handle resize
             window.addEventListener('resize', () => {
               camera.aspect = window.innerWidth / window.innerHeight;
               camera.updateProjectionMatrix();
@@ -308,7 +433,6 @@ export default function GlobeMap({ style }) {
       <View style={[styles.container, styles.centerLoader]}>
         <ActivityIndicator size="large" color={COLORS.primary} />
         <Text style={styles.loadingText}>Loading globe...</Text>
-        <Text style={styles.loadingSubtext}>Fetching disaster data...</Text>
       </View>
     );
   }
@@ -322,6 +446,7 @@ export default function GlobeMap({ style }) {
         javaScriptEnabled={true}
         domStorageEnabled={true}
         onMessage={onMessage}
+        scrollEnabled={false}
       />
 
       {/* Event Modal */}
@@ -370,7 +495,7 @@ export default function GlobeMap({ style }) {
                   }}
                 >
                   <Ionicons name="open-outline" size={20} color={COLORS.white} />
-                  <Text style={modalStyles.linkText}>View NASA Source</Text>
+                  <Text style={modalStyles.linkText}>View Source</Text>
                 </TouchableOpacity>
               )}
 
@@ -402,12 +527,6 @@ const styles = StyleSheet.create({
     color: COLORS.white,
     fontSize: 16,
     fontWeight: '600',
-  },
-  loadingSubtext: {
-    marginTop: 8,
-    color: COLORS.white,
-    opacity: 0.7,
-    fontSize: 14,
   },
   webview: {
     flex: 1,
