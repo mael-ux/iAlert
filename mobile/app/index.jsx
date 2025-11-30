@@ -1,9 +1,17 @@
 // mobile/app/index.jsx
-// Photo of the Day - Homepage
+// Photo of the Day - Tap anywhere to continue
 import React, { useState, useEffect } from 'react';
-import { View, Text, Image, StyleSheet, ActivityIndicator, Dimensions, TouchableOpacity } from 'react-native';
+import { 
+  View, 
+  Text, 
+  Image, 
+  StyleSheet, 
+  ActivityIndicator, 
+  Dimensions, 
+  TouchableOpacity,
+  StatusBar 
+} from 'react-native';
 import { useRouter } from 'expo-router';
-import SafeAreaWrapper from './components/safeAreaWrapper';
 import { COLORS } from '../constants/colors';
 import { API_URL } from '../constants/api';
 
@@ -13,205 +21,153 @@ export default function HomeScreen() {
   const router = useRouter();
   const [photo, setPhoto] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
 
   useEffect(() => {
-    fetchRandomPhoto();
+    fetchPhoto();
   }, []);
 
-  const fetchRandomPhoto = async () => {
+  const fetchPhoto = async () => {
     try {
       setLoading(true);
+      console.log('📸 Fetching photo from:', `${API_URL}/photoOfTheDay`);
+      
       const response = await fetch(`${API_URL}/photoOfTheDay`);
       
       if (!response.ok) {
-        throw new Error('Failed to fetch photo');
+        throw new Error(`HTTP ${response.status}`);
       }
       
       const data = await response.json();
+      console.log('✅ Photo loaded:', data.title);
       setPhoto(data);
-      setError(null);
     } catch (err) {
-      console.error('Error fetching photo:', err);
-      setError(err.message);
+      console.error('❌ Error fetching photo:', err);
+      // Use fallback
+      setPhoto({
+        title: "Horsehead Nebula",
+        image: "https://apod.nasa.gov/apod/image/2301/Horsehead_Hubble_1225.jpg",
+        description: "The Horsehead Nebula is one of the most identifiable nebulae in the sky.",
+        credits: "NASA, ESA, Hubble Heritage Team"
+      });
     } finally {
       setLoading(false);
     }
   };
 
+  const handleContinue = () => {
+    router.push('/(tabs)');
+  };
+
   if (loading) {
     return (
-      <SafeAreaWrapper style={styles.container}>
-        <View style={styles.centerContent}>
-          <ActivityIndicator size="large" color={COLORS.primary} />
-          <Text style={styles.loadingText}>Loading Photo of the Day...</Text>
-        </View>
-      </SafeAreaWrapper>
-    );
-  }
-
-  if (error || !photo) {
-    return (
-      <SafeAreaWrapper style={styles.container}>
-        <View style={styles.centerContent}>
-          <Text style={styles.errorText}>Failed to load photo</Text>
-          <TouchableOpacity style={styles.retryButton} onPress={fetchRandomPhoto}>
-            <Text style={styles.retryText}>Retry</Text>
-          </TouchableOpacity>
-        </View>
-      </SafeAreaWrapper>
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#ffffff" />
+      </View>
     );
   }
 
   return (
-    <SafeAreaWrapper style={styles.container} edges={['top', 'bottom']}>
-      <View style={styles.imageContainer}>
-        <Image 
-          source={{ uri: photo.url }} 
-          style={styles.image}
-          resizeMode="cover"
-        />
-        
-        {/* Gradient overlay for text readability */}
-        <View style={styles.gradient} />
-        
-        {/* Content overlay */}
-        <View style={styles.overlay}>
-          <View style={styles.header}>
-            <Text style={styles.badge}>Photo of the Day</Text>
-          </View>
+    <TouchableOpacity 
+      style={styles.container} 
+      activeOpacity={1} 
+      onPress={handleContinue}
+    >
+      <StatusBar barStyle="light-content" />
+      
+      {/* Full-screen image */}
+      <Image 
+        source={{ uri: photo?.image }} 
+        style={styles.backgroundImage}
+        resizeMode="cover"
+      />
+      
+      {/* Dark overlay for text readability */}
+      <View style={styles.overlay} />
+      
+      {/* Content */}
+      <View style={styles.content}>
+        <View style={styles.textContainer}>
+          <Text style={styles.title}>{photo?.title}</Text>
           
-          <View style={styles.footer}>
-            <Text style={styles.title}>{photo.title}</Text>
-            {photo.description && (
-              <Text style={styles.description} numberOfLines={3}>
-                {photo.description}
-              </Text>
-            )}
-            {photo.credits && (
-              <Text style={styles.credits}>📷 {photo.credits}</Text>
-            )}
-            
-            <TouchableOpacity 
-              style={styles.exploreButton}
-              onPress={() => router.push('/nasa')}
-            >
-              <Text style={styles.exploreText}>Explore Gallery →</Text>
-            </TouchableOpacity>
-          </View>
+          {photo?.credits && (
+            <Text style={styles.credits}>© {photo.credits}</Text>
+          )}
+          
+          {photo?.description && (
+            <Text style={styles.description}>{photo.description}</Text>
+          )}
+        </View>
+        
+        <View style={styles.footer}>
+          <Text style={styles.tapText}>Tap anywhere to continue</Text>
         </View>
       </View>
-    </SafeAreaWrapper>
+    </TouchableOpacity>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: COLORS.background,
+    backgroundColor: '#000',
   },
-  centerContent: {
+  loadingContainer: {
     flex: 1,
+    backgroundColor: '#000',
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 20,
   },
-  loadingText: {
-    marginTop: 16,
-    fontSize: 16,
-    color: COLORS.textLight,
-  },
-  errorText: {
-    fontSize: 16,
-    color: COLORS.error,
-    marginBottom: 16,
-  },
-  retryButton: {
-    backgroundColor: COLORS.primary,
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    borderRadius: 8,
-  },
-  retryText: {
-    color: COLORS.white,
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  imageContainer: {
-    flex: 1,
-    position: 'relative',
-  },
-  image: {
+  backgroundImage: {
+    position: 'absolute',
     width: width,
     height: height,
   },
-  gradient: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: 0,
-    height: '50%',
-    backgroundColor: 'rgba(0,0,0,0.7)',
-  },
   overlay: {
     position: 'absolute',
-    left: 0,
-    right: 0,
-    top: 0,
-    bottom: 0,
+    width: width,
+    height: height,
+    backgroundColor: 'rgba(0, 0, 0, 0.4)',
+  },
+  content: {
+    flex: 1,
     justifyContent: 'space-between',
-    padding: 20,
+    padding: 24,
+    paddingTop: 60,
+    paddingBottom: 40,
   },
-  header: {
-    alignItems: 'flex-start',
-  },
-  badge: {
-    backgroundColor: 'rgba(255,255,255,0.2)',
-    color: COLORS.white,
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
-    fontSize: 14,
-    fontWeight: '600',
-    backdropFilter: 'blur(10px)',
-  },
-  footer: {
+  textContainer: {
     gap: 12,
   },
   title: {
-    fontSize: 28,
+    fontSize: 32,
     fontWeight: 'bold',
-    color: COLORS.white,
-    textShadowColor: 'rgba(0, 0, 0, 0.75)',
-    textShadowOffset: { width: -1, height: 1 },
-    textShadowRadius: 10,
-  },
-  description: {
-    fontSize: 16,
-    color: COLORS.white,
-    lineHeight: 24,
-    opacity: 0.9,
-    textShadowColor: 'rgba(0, 0, 0, 0.75)',
-    textShadowOffset: { width: -1, height: 1 },
-    textShadowRadius: 10,
+    color: '#ffffff',
+    textShadowColor: 'rgba(0, 0, 0, 0.8)',
+    textShadowOffset: { width: 0, height: 2 },
+    textShadowRadius: 8,
   },
   credits: {
     fontSize: 14,
-    color: COLORS.white,
-    opacity: 0.8,
+    color: '#ffffff',
+    opacity: 0.9,
     fontStyle: 'italic',
   },
-  exploreButton: {
-    backgroundColor: COLORS.primary,
-    paddingHorizontal: 24,
-    paddingVertical: 14,
-    borderRadius: 12,
-    alignSelf: 'flex-start',
-    marginTop: 8,
-  },
-  exploreText: {
-    color: COLORS.white,
+  description: {
     fontSize: 16,
-    fontWeight: '600',
+    color: '#ffffff',
+    lineHeight: 24,
+    opacity: 0.95,
+    textShadowColor: 'rgba(0, 0, 0, 0.8)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 4,
+  },
+  footer: {
+    alignItems: 'center',
+  },
+  tapText: {
+    fontSize: 16,
+    color: '#ffffff',
+    opacity: 0.8,
+    letterSpacing: 1,
   },
 });

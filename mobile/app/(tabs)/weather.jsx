@@ -1,352 +1,447 @@
-import React, { useState, useEffect } from 'react';
-import { 
-  View, 
-  Text, 
-  StyleSheet, 
-  SafeAreaView, 
-  ActivityIndicator, 
-  FlatList,
-  TouchableOpacity
+// mobile/app/(tabs)/weather.jsx
+// Weather view with swipe navigation between current location and interest zones
+import React, { useState, useEffect, useRef } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  ActivityIndicator,
+  ScrollView,
+  Dimensions,
+  TouchableOpacity,
+  Animated,
+  PanResponder,
 } from 'react-native';
-import { COLORS } from '../../constants/colors';
-import { Ionicons } from '@expo/vector-icons';
-import { useUser } from '@clerk/clerk-expo'; // To get user ID
+import { useUser } from '@clerk/clerk-expo';
 import * as Location from 'expo-location';
-import { API_URL } from '../../constants/api'; // Our new API config
+import { Ionicons } from '@expo/vector-icons';
+import SafeAreaWrapper from '../components/safeAreaWrapper';
+import { COLORS } from '../../constants/colors';
+import { API_URL } from '../../constants/api';
 
-// --- (Helper function, same as before) ---
-const getWeatherIcon = (iconCode) => {
-  switch (iconCode) {
-    case '01d': return 'sunny-outline';
-    case '01n': return 'moon-outline';
-    case '02d': return 'partly-sunny-outline';
-    // ... (add all other cases from the template)
-    default: return 'cloudy-outline';
-  }
-};
-
-// This will be our "Current Location" object
-const CURRENT_LOCATION_ZONE = {
-  id: 'current',
-  title: 'Current',
-  latitude: null,
-  longitude: null,
-};
+const { width } = Dimensions.get('window');
 
 export default function WeatherScreen() {
-  const { user } = useUser(); // Get the logged-in user
+  const { user } = useUser();
+  const [currentIndex, setCurrentIndex] = useState(0);
+  const [locations, setLocations] = useState([]);
+  const [weatherData, setWeatherData] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const scrollX = useRef(new Animated.Value(0)).current;
+  const scrollViewRef = useRef(null);
 
-  // --- State Management ---
-  const [weatherData, setWeatherData] = useState(null); // Holds the displayed weather
-  const [savedZones, setSavedZones] = useState([]); // Holds the list from DB
-  const [activeZone, setActiveZone] = useState(CURRENT_LOCATION_ZONE); // Tracks which zone is selected
-  
-  const [isLoading, setIsLoading] = useState(true); // For the main weather display
-  const [isFetching, setIsFetching] = useState(false); // For subsequent fetches
-  const [error, setError] = useState(null);
-
-  // --- Data Fetching on Load ---
   useEffect(() => {
-    if (user) {
-      // Run both functions on load
-      fetchDataForCurrentLocation();
-      fetchSavedZones();
-    }
-  }, [user]); // Re-run if user changes
+    loadLocations();
+  }, [user]);
 
-  // --- Logic Function 1: Get Weather by Coordinates ---
-  const getWeather = async (latitude, longitude) => {
-    if (!latitude || !longitude) return;
-    
-    setIsFetching(true); // Show a small spinner
-    setError(null);
+  const loadLocations = async () => {
     try {
-      const response = await fetch(`${API_URL}/get-weather`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ latitude, longitude }),
-      });
-      if (!response.ok) throw new Error('Failed to fetch weather');
+      setLoading(true);
       
-      const data = await response.json();
-      setWeatherData(data);
-    } catch (err) {
-      setError(err.message);
+      // 1. Get current location
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      let currentLoc = null;
+      
+      if (status === 'granted') {
+        const position = await Location.getCurrentPositionAsync({});
+        const address = await Location.reverseGeocodeAsync({
+          latitude: position.coords.latitude,
+          longitude: position.coords.longitude,
+        });
+        
+        currentLoc = {
+          id: 'current',
+          title: '📍 Current Location',
+          subtitle: address[0]?.city || 'Your Location',
+          latitude: position.coords.latitude,
+          longitude: position.coords.longitude,
+        };
+      }
+
+      // 2. Get saved interest zones
+      let zones = [];
+      if (user) {
+        const response = await fetch(`${API_URL}/interestZone/${user.id}`);
+        if (response.ok) {
+          const data = await response.json();
+          zones = data.map(zone => ({
+            id: zone.id,
+            title: zone.title,
+            subtitle: 'Saved Location',
+            latitude: parseFloat(zone.latitude),
+            longitude: parseFloat(zone.longitude),
+          }));
+        }
+      }
+
+      // 3. Combine all locations
+      const allLocations = currentLoc ? [currentLoc, ...zones] : zones;
+      setLocations(allLocations);
+
+      // 4. Fetch weather for all locations
+      await fetchAllWeather(allLocations);
+      
+    } catch (error) {
+      console.error('Error loading locations:', error);
     } finally {
-      setIsLoading(false); // Hide big spinner
-      setIsFetching(false); // Hide small spinner
+      setLoading(false);
     }
   };
 
-  // --- Logic Function 2: Get Current Location Weather ---
-  const fetchDataForCurrentLocation = async () => {
-    setIsLoading(true);
-    let { status } = await Location.requestForegroundPermissionsAsync();
-    if (status !== 'granted') {
-      setError('Permission to access location was denied');
-      setIsLoading(false);
-      return;
-    }
+  const fetchAllWeather = async (locs) => {
+    const weatherPromises = locs.map(async (loc) => {
+      try {
+        const response = await fetch(`${API_URL}/get-weather`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            latitude: loc.latitude,
+            longitude: loc.longitude,
+          }),
+        });
+        
+        if (response.ok) {
+          return await response.json();
+        }
+        return null;
+      } catch (error) {
+        console.error(`Error fetching weather for ${loc.title}:`, error);
+        return null;
+      }
+    });
 
-    let location = await Location.getCurrentPositionAsync({});
-    const { latitude, longitude } = location.coords;
-    
-    // Store coords in our "Current" object
-    CURRENT_LOCATION_ZONE.latitude = latitude;
-    CURRENT_LOCATION_ZONE.longitude = longitude;
-    
-    setActiveZone(CURRENT_LOCATION_ZONE); // Set "Current" as default
-    await getWeather(latitude, longitude); // Fetch weather
+    const results = await Promise.all(weatherPromises);
+    setWeatherData(results);
   };
 
-  // --- Logic Function 3: Get Saved Zones from DB ---
-  const fetchSavedZones = async () => {
-    if (!user) return;
-    try {
-      const response = await fetch(`${API_URL}/interestZone/${user.id}`);
-      if (!response.ok) throw new Error('Failed to fetch zones');
-      const zones = await response.json();
-      setSavedZones(zones);
-    } catch (err)
-      { console.error("Failed to fetch zones:", err);
-    }
+  const onScroll = Animated.event(
+    [{ nativeEvent: { contentOffset: { x: scrollX } } }],
+    { useNativeDriver: false }
+  );
+
+  const handleScrollEnd = (event) => {
+    const offsetX = event.nativeEvent.contentOffset.x;
+    const index = Math.round(offsetX / width);
+    setCurrentIndex(index);
   };
 
-  // --- Logic Function 4: Handle Zone Button Press ---
-  const handleZonePress = async (zone) => {
-    setActiveZone(zone); // Highlight the new button
-    
-    let lat, lng;
-    if (zone.id === 'current') {
-      lat = zone.latitude;
-      lng = zone.longitude;
-    } else {
-      // Saved zones have latitude/longitude as strings from DB
-      lat = parseFloat(zone.latitude);
-      lng = parseFloat(zone.longitude);
-    }
-    
-    await getWeather(lat, lng); // Fetch weather for the selected zone
+  const navigateToLocation = (index) => {
+    scrollViewRef.current?.scrollTo({
+      x: index * width,
+      animated: true,
+    });
+    setCurrentIndex(index);
   };
 
-  // --- Render Functions ---
-  
-  const renderWeatherContent = () => {
-    if (isLoading) {
-      return <ActivityIndicator size="large" color={COLORS.primary} style={styles.icon} />;
-    }
-    if (error) {
-      return <Text style={styles.errorText}>{error}</Text>;
-    }
-    if (weatherData) {
+  const renderWeatherCard = (location, weather, index) => {
+    if (!weather) {
       return (
-        <View style={styles.weatherContainer}>
-          <Text style={styles.location}>{weatherData.name}</Text>
-          <Ionicons 
-            name={getWeatherIcon(weatherData.weather[0].icon)} 
-            size={100} 
-            color={COLORS.primary} 
-            style={styles.icon}
-          />
-          <Text style={styles.temp}>{Math.round(weatherData.main.temp)}°C</Text>
-          <Text style={styles.description}>
-            {weatherData.weather[0].description}
-          </Text>
-          
-          {/* Additional Weather Info */}
-          <View style={styles.detailsContainer}>
-            <View style={styles.detailCard}>
-              <Ionicons name="water-outline" size={24} color={COLORS.primary} />
-              <Text style={styles.detailLabel}>Humidity</Text>
-              <Text style={styles.detailValue}>{weatherData.main.humidity}%</Text>
-            </View>
-            
-            <View style={styles.detailCard}>
-              <Ionicons name="speedometer-outline" size={24} color={COLORS.primary} />
-              <Text style={styles.detailLabel}>Pressure</Text>
-              <Text style={styles.detailValue}>{weatherData.main.pressure} hPa</Text>
-            </View>
-            
-            <View style={styles.detailCard}>
-              <Ionicons name="analytics-outline" size={24} color={COLORS.primary} />
-              <Text style={styles.detailLabel}>Feels Like</Text>
-              <Text style={styles.detailValue}>{Math.round(weatherData.main.feels_like)}°C</Text>
-            </View>
-          </View>
-          
-          <View style={styles.detailsContainer}>
-            <View style={styles.detailCard}>
-              <Ionicons name="arrow-up-outline" size={24} color={COLORS.primary} />
-              <Text style={styles.detailLabel}>Max Temp</Text>
-              <Text style={styles.detailValue}>{Math.round(weatherData.main.temp_max)}°C</Text>
-            </View>
-            
-            <View style={styles.detailCard}>
-              <Ionicons name="arrow-down-outline" size={24} color={COLORS.primary} />
-              <Text style={styles.detailLabel}>Min Temp</Text>
-              <Text style={styles.detailValue}>{Math.round(weatherData.main.temp_min)}°C</Text>
-            </View>
-            
-            <View style={styles.detailCard}>
-              <Ionicons name="flag-outline" size={24} color={COLORS.primary} />
-              <Text style={styles.detailLabel}>Wind</Text>
-              <Text style={styles.detailValue}>{Math.round(weatherData.wind.speed)} m/s</Text>
-            </View>
-          </View>
+        <View key={index} style={[styles.card, { width }]}>
+          <Text style={styles.errorText}>Weather data unavailable</Text>
         </View>
       );
     }
-    return null;
-  };
 
-  const renderZoneSelector = () => {
-    const allZones = [CURRENT_LOCATION_ZONE, ...savedZones];
-    
+    const temp = Math.round(weather.main?.temp || 0);
+    const feelsLike = Math.round(weather.main?.feels_like || 0);
+    const description = weather.weather?.[0]?.description || '';
+    const icon = weather.weather?.[0]?.icon || '01d';
+
     return (
-      <View style={styles.zoneContainer}>
-        <FlatList
-          data={allZones}
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          keyExtractor={(item) => item.id.toString()} // Use id for saved, 'current' for current
-          renderItem={({ item }) => {
-            const isActive = item.id === activeZone.id;
-            return (
-              <TouchableOpacity
-                style={[styles.zoneButton, isActive && styles.zoneButtonActive]}
-                onPress={() => handleZonePress(item)}
-              >
-                <Text style={[styles.zoneText, isActive && styles.zoneTextActive]}>
-                  {item.title}
-                </Text>
-              </TouchableOpacity>
-            );
-          }}
-          contentContainerStyle={{ paddingHorizontal: 20 }}
-        />
+      <View key={index} style={[styles.card, { width }]}>
+        <View style={styles.cardHeader}>
+          <View>
+            <Text style={styles.locationTitle}>{location.title}</Text>
+            <Text style={styles.locationSubtitle}>{location.subtitle}</Text>
+          </View>
+          {location.id !== 'current' && (
+            <TouchableOpacity
+              onPress={() => deleteZone(location.id)}
+              style={styles.deleteButton}
+            >
+              <Ionicons name="trash-outline" size={20} color={COLORS.error} />
+            </TouchableOpacity>
+          )}
+        </View>
+
+        <View style={styles.mainWeather}>
+          <Text style={styles.temperature}>{temp}°</Text>
+          <Text style={styles.description}>{description}</Text>
+        </View>
+
+        <View style={styles.details}>
+          <View style={styles.detailItem}>
+            <Ionicons name="thermometer-outline" size={20} color={COLORS.textLight} />
+            <Text style={styles.detailText}>Feels like {feelsLike}°</Text>
+          </View>
+          <View style={styles.detailItem}>
+            <Ionicons name="water-outline" size={20} color={COLORS.textLight} />
+            <Text style={styles.detailText}>{weather.main?.humidity}% humidity</Text>
+          </View>
+          <View style={styles.detailItem}>
+            <Ionicons name="speedometer-outline" size={20} color={COLORS.textLight} />
+            <Text style={styles.detailText}>{weather.wind?.speed} m/s wind</Text>
+          </View>
+        </View>
       </View>
     );
   };
 
+  const deleteZone = async (zoneId) => {
+    if (!user) return;
+    
+    try {
+      const response = await fetch(`${API_URL}/interestZone/${user.id}/${zoneId}`, {
+        method: 'DELETE',
+      });
+      
+      if (response.ok) {
+        // Reload locations
+        loadLocations();
+      }
+    } catch (error) {
+      console.error('Error deleting zone:', error);
+    }
+  };
+
+  if (loading) {
+    return (
+      <SafeAreaWrapper style={styles.container}>
+        <View style={styles.centerContent}>
+          <ActivityIndicator size="large" color={COLORS.primary} />
+          <Text style={styles.loadingText}>Loading weather...</Text>
+        </View>
+      </SafeAreaWrapper>
+    );
+  }
+
+  if (locations.length === 0) {
+    return (
+      <SafeAreaWrapper style={styles.container}>
+        <View style={styles.centerContent}>
+          <Ionicons name="location-outline" size={64} color={COLORS.textLight} />
+          <Text style={styles.emptyText}>No locations found</Text>
+          <Text style={styles.emptySubtext}>
+            Add interest zones to see weather
+          </Text>
+        </View>
+      </SafeAreaWrapper>
+    );
+  }
+
   return (
-    <SafeAreaView style={styles.container}>
-      <Text style={styles.title}>
-        {activeZone.id === 'current' ? "Current Weather" : `Weather for ${activeZone.title}`}
-      </Text>
-      
-      {/* This will show the big spinner on load, or the weather */}
-      {renderWeatherContent()}
-      
-      {/* This is the small spinner for when you tap a new zone */}
-      {isFetching && <ActivityIndicator size="small" color={COLORS.primary} style={{ marginTop: 10 }} />}
-      
-      {/* This is the new horizontal list of buttons */}
-      {renderZoneSelector()}
-    </SafeAreaView>
+    <SafeAreaWrapper style={styles.container}>
+      {/* Location tabs */}
+      <View style={styles.tabBar}>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.tabContent}
+        >
+          {locations.map((loc, index) => (
+            <TouchableOpacity
+              key={index}
+              style={[
+                styles.tab,
+                currentIndex === index && styles.activeTab,
+              ]}
+              onPress={() => navigateToLocation(index)}
+            >
+              <Text
+                style={[
+                  styles.tabText,
+                  currentIndex === index && styles.activeTabText,
+                ]}
+              >
+                {loc.id === 'current' ? '📍' : loc.title}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+      </View>
+
+      {/* Swipeable weather cards */}
+      <ScrollView
+        ref={scrollViewRef}
+        horizontal
+        pagingEnabled
+        showsHorizontalScrollIndicator={false}
+        onScroll={onScroll}
+        onMomentumScrollEnd={handleScrollEnd}
+        scrollEventThrottle={16}
+      >
+        {locations.map((loc, index) =>
+          renderWeatherCard(loc, weatherData[index], index)
+        )}
+      </ScrollView>
+
+      {/* Page indicator */}
+      <View style={styles.pageIndicator}>
+        {locations.map((_, index) => (
+          <View
+            key={index}
+            style={[
+              styles.dot,
+              currentIndex === index && styles.activeDot,
+            ]}
+          />
+        ))}
+      </View>
+
+      {/* Swipe hint */}
+      {locations.length > 1 && currentIndex === 0 && (
+        <View style={styles.swipeHint}>
+          <Ionicons name="chevron-forward" size={20} color={COLORS.textLight} />
+          <Text style={styles.swipeText}>Swipe for more locations</Text>
+        </View>
+      )}
+    </SafeAreaWrapper>
   );
 }
 
-// --- Styles ---
 const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: COLORS.background,
-    alignItems: 'center',
-    paddingTop: 40,
   },
-  title: {
+  centerContent: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  loadingText: {
+    marginTop: 16,
+    fontSize: 16,
+    color: COLORS.textLight,
+  },
+  emptyText: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: COLORS.text,
+    marginTop: 16,
+  },
+  emptySubtext: {
+    fontSize: 14,
+    color: COLORS.textLight,
+    marginTop: 8,
+  },
+  tabBar: {
+    backgroundColor: COLORS.card,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.border,
+  },
+  tabContent: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+  },
+  tab: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    marginRight: 8,
+    borderRadius: 20,
+    backgroundColor: COLORS.background,
+  },
+  activeTab: {
+    backgroundColor: COLORS.primary,
+  },
+  tabText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: COLORS.textLight,
+  },
+  activeTabText: {
+    color: COLORS.white,
+  },
+  card: {
+    padding: 20,
+  },
+  cardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 24,
+  },
+  locationTitle: {
     fontSize: 24,
     fontWeight: 'bold',
     color: COLORS.text,
-    marginBottom: 40,
-    minHeight: 30, // Reserve space
   },
-  weatherContainer: {
-    alignItems: 'center',
-    minHeight: 250,
-    width: '100%',
-    paddingHorizontal: 20,
-  },
-  location: {
-    fontSize: 28,
-    color: COLORS.text,
-    fontWeight: '500',
-    marginBottom: 10,
-  },
-  icon: {
-    marginVertical: 20,
-  },
-  temp: {
-    fontSize: 64,
-    fontWeight: 'bold',
-    color: COLORS.primary,
-  },
-  description: {
-    fontSize: 18,
-    color: COLORS.text,
-    textTransform: 'capitalize',
-    marginTop: 10,
-    marginBottom: 20,
-  },
-  errorText: {
-    fontSize: 16,
-    color: COLORS.primary,
-    textAlign: 'center',
-  },
-  detailsContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    width: '100%',
-    marginTop: 15,
-  },
-  detailCard: {
-    alignItems: 'center',
-    backgroundColor: COLORS.card,
-    padding: 12,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    minWidth: 90,
-  },
-  detailLabel: {
-    fontSize: 12,
+  locationSubtitle: {
+    fontSize: 14,
     color: COLORS.textLight,
     marginTop: 4,
   },
-  detailValue: {
-    fontSize: 16,
-    fontWeight: '600',
+  deleteButton: {
+    padding: 8,
+  },
+  mainWeather: {
+    alignItems: 'center',
+    marginBottom: 32,
+  },
+  temperature: {
+    fontSize: 72,
+    fontWeight: 'bold',
     color: COLORS.text,
-    marginTop: 2,
   },
-  // --- Zone Selector Styles ---
-  zoneContainer: {
-    marginTop: 'auto', // Pushes this to the bottom
-    marginBottom: 40,
-    width: '100%',
-    height: 60,
+  description: {
+    fontSize: 18,
+    color: COLORS.textLight,
+    textTransform: 'capitalize',
+    marginTop: 8,
   },
-  zoneButton: {
-    paddingVertical: 10,
-    paddingHorizontal: 18,
+  details: {
+    gap: 16,
+  },
+  detailItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
     backgroundColor: COLORS.card,
-    borderRadius: 20,
-    marginRight: 10,
+    padding: 16,
+    borderRadius: 12,
+  },
+  detailText: {
+    fontSize: 16,
+    color: COLORS.text,
+  },
+  errorText: {
+    fontSize: 16,
+    color: COLORS.error,
+    textAlign: 'center',
+  },
+  pageIndicator: {
+    flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
-    borderWidth: 1,
-    borderColor: COLORS.border,
+    paddingVertical: 16,
+    gap: 8,
   },
-  zoneButtonActive: {
+  dot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: COLORS.border,
+  },
+  activeDot: {
     backgroundColor: COLORS.primary,
-    borderColor: COLORS.primary,
+    width: 24,
   },
-  zoneText: {
-    color: COLORS.text,
-    fontWeight: '500',
+  swipeHint: {
+    position: 'absolute',
+    right: 20,
+    bottom: 100,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: COLORS.card,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    opacity: 0.8,
   },
-  zoneTextActive: {
-    color: COLORS.white,
-    fontWeight: '600',
-  }
+  swipeText: {
+    fontSize: 12,
+    color: COLORS.textLight,
+  },
 });

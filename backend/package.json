@@ -20,7 +20,8 @@
     "drizzle-orm": "^0.44.7",
     "express": "^5.1.0",
     "node-fetch": "^2.7.0",
-    "postgres": "^3.4.7"
+    "postgres": "^3.4.7",
+    "svix": "^1.81.0"
   },
   "devDependencies": {
     "drizzle-kit": "^0.31.1",
