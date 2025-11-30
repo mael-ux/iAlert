@@ -5,7 +5,7 @@ import { COLORS } from "../../constants/colors";
 
 export default function TabsLayout() {
   const { isSignedIn, isLoaded } = useAuth();
-
+  useAlertPolling();
   if (!isLoaded) return null;
 
   // If not signed in, go to auth
