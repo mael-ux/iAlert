@@ -66,18 +66,6 @@ export default function GlobeMap({ style }) {
   };
 
   const buildGlobe = (events) => {
-    // Convert disaster info to base64 SVG icons for each type
-    const iconSVGs = {};
-    Object.keys(DISASTER_INFO).forEach(key => {
-      const info = DISASTER_INFO[key];
-      // Create a simple SVG icon
-      const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24">
-        <circle cx="12" cy="12" r="10" fill="${info.color}" stroke="white" stroke-width="2"/>
-        <text x="12" y="16" font-size="12" text-anchor="middle" fill="white">${info.emoji}</text>
-      </svg>`;
-      iconSVGs[key] = `data:image/svg+xml;base64,${btoa(svg)}`;
-    });
-
     const html = `
       <!DOCTYPE html>
       <html>
@@ -140,7 +128,6 @@ export default function GlobeMap({ style }) {
           <script>
             const DISASTER_INFO = ${JSON.stringify(DISASTER_INFO)};
             const DISASTERS = ${JSON.stringify(events)};
-            const ICON_SVGS = ${JSON.stringify(iconSVGs)};
             
             // Setup scene
             const scene = new THREE.Scene();
@@ -250,12 +237,11 @@ export default function GlobeMap({ style }) {
               ctx.lineWidth = 4;
               ctx.stroke();
               
-              // Add emoji
-              ctx.font = 'bold 32px Arial';
-              ctx.textAlign = 'center';
-              ctx.textBaseline = 'middle';
+              // Add small white dot in center instead of emoji
               ctx.fillStyle = 'white';
-              ctx.fillText(info.emoji, 32, 32);
+              ctx.beginPath();
+              ctx.arc(32, 32, 8, 0, Math.PI * 2);
+              ctx.fill();
               
               const texture = new THREE.CanvasTexture(canvas);
               const spriteMaterial = new THREE.SpriteMaterial({ 
@@ -515,7 +501,11 @@ export default function GlobeMap({ style }) {
 
 const styles = StyleSheet.create({
   container: {
-    flex: 1,
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
     backgroundColor: '#000',
   },
   centerLoader: {

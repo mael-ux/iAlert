@@ -45,7 +45,7 @@ export default function ChatBot() {
     setIsLoading(true);
 
     try {
-      const response = await fetch(`${AI_API_URL}/countries/${cont}`);
+      const response = await fetch(`${AI_API_URL}/api/countries/${cont}`);
       
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
@@ -91,7 +91,7 @@ export default function ChatBot() {
 
     // Call AI prediction endpoint
     try {
-      const response = await fetch(`${AI_API_URL}/predict-disaster`, {
+      const response = await fetch(`${AI_API_URL}/api/predict-disaster`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ region, country: p }),
@@ -222,7 +222,7 @@ export default function ChatBot() {
 const styles = StyleSheet.create({
   container: { 
     flex: 1, 
-    backgroundColor: COLORS.background  // Use app background
+    backgroundColor: COLORS.background  
   },
 
   chat: { 
