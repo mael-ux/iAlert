@@ -45,7 +45,7 @@ export default function ChatBot() {
     setIsLoading(true);
 
     try {
-      const response = await fetch(`${AI_API_URL}/api/countries/${cont}`);
+      const response = await fetch(`${AI_API_URL}/countries/${cont}`);
       
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
@@ -91,7 +91,7 @@ export default function ChatBot() {
 
     // Call AI prediction endpoint
     try {
-      const response = await fetch(`${AI_API_URL}/api/predict-disaster`, {
+      const response = await fetch(`${AI_API_URL}/predict-disaster`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ region, country: p }),
@@ -217,12 +217,12 @@ export default function ChatBot() {
 }
 
 // ----------------------------------------------------------
-// IMPROVED WHATSAPP-STYLE DESIGN
+// APP-THEMED WHATSAPP-STYLE DESIGN
 // ----------------------------------------------------------
 const styles = StyleSheet.create({
   container: { 
     flex: 1, 
-    backgroundColor: "#ECE5DD" 
+    backgroundColor: COLORS.background  // Use app background
   },
 
   chat: { 
@@ -243,25 +243,25 @@ const styles = StyleSheet.create({
   },
 
   botBubble: {
-    backgroundColor: "#ffffff",
+    backgroundColor: COLORS.card,  // Use app card color
     alignSelf: "flex-start",
     borderBottomLeftRadius: 0,
   },
 
   userBubble: {
-    backgroundColor: "#DCF8C6",
+    backgroundColor: COLORS.primary + '20',  // Primary color with transparency
     alignSelf: "flex-end",
     borderBottomRightRadius: 0,
   },
 
   botText: { 
-    color: "#000", 
+    color: COLORS.text,  // Use app text color
     fontSize: 15,
     lineHeight: 20,
   },
   
   userText: { 
-    color: "#000", 
+    color: COLORS.text,  // Use app text color
     fontSize: 15 
   },
 
@@ -276,7 +276,7 @@ const styles = StyleSheet.create({
   },
 
   contBtn: {
-    backgroundColor: "#34B7F1",
+    backgroundColor: COLORS.primary,  // Use app primary color (red)
     paddingVertical: 12,
     paddingHorizontal: 20,
     borderRadius: 20,
@@ -290,7 +290,7 @@ const styles = StyleSheet.create({
   },
 
   contBtnText: {
-    color: "#fff",
+    color: COLORS.white,  // Use white for contrast
     fontWeight: "bold",
     fontSize: 15,
   },
@@ -300,7 +300,7 @@ const styles = StyleSheet.create({
   },
 
   countryBtn: {
-    backgroundColor: "#25D366",
+    backgroundColor: COLORS.primary,  // Use app primary color (red)
     paddingVertical: 10,
     paddingHorizontal: 16,
     borderRadius: 20,
@@ -313,7 +313,7 @@ const styles = StyleSheet.create({
   },
 
   countryBtnText: {
-    color: "#fff",
+    color: COLORS.white,  // Use white for contrast
     fontWeight: "bold",
     fontSize: 14,
   },
