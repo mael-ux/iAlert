@@ -276,18 +276,18 @@ async def get_disasters(limit: int = 100, days: int = 30, force_refresh: bool = 
             result["cached"] = True
             return result
     
-    # Try multiple endpoints - v2.1 and v3 with different proxies
+    # Try multiple endpoints - v3 first (better data)
     endpoints = [
-        # v2.1 API (simpler, might work better)
-        f"https://eonet.gsfc.nasa.gov/api/v2.1/events?status=open&limit={limit}&days={days}",
-        # v3 API (current)
+        # v3 API - Better, more detailed data
         f"https://eonet.gsfc.nasa.gov/api/v3/events?status=open&limit={limit}",
-        # v2.1 via CORS proxy
-        f"https://api.allorigins.win/raw?url=https://eonet.gsfc.nasa.gov/api/v2.1/events?status=open&limit={limit}&days={days}",
+        # v2.1 API - Fallback
+        f"https://eonet.gsfc.nasa.gov/api/v2.1/events?status=open&limit={limit}&days={days}",
         # v3 via CORS proxy
         f"https://api.allorigins.win/raw?url=https://eonet.gsfc.nasa.gov/api/v3/events?status=open&limit={limit}",
-        # Another CORS proxy with v2.1
-        f"https://corsproxy.io/?https://eonet.gsfc.nasa.gov/api/v2.1/events?status=open&limit={limit}&days={days}"
+        # v2.1 via CORS proxy
+        f"https://api.allorigins.win/raw?url=https://eonet.gsfc.nasa.gov/api/v2.1/events?status=open&limit={limit}&days={days}",
+        # Another CORS proxy with v3
+        f"https://corsproxy.io/?https://eonet.gsfc.nasa.gov/api/v3/events?status=open&limit={limit}"
     ]
     
     last_error = None

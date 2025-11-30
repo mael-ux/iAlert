@@ -14,7 +14,7 @@ const SettingsScreen = () => {
       </Text>
       
       <View style={styles.themeSelector}>
-        {THEME_NAMES.map((name) => (
+      {Object.keys(THEMES).map((name) => (
           <TouchableOpacity
             key={name}
             style={[
