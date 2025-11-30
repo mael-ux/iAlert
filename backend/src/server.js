@@ -140,12 +140,6 @@ app.get("/api/interestZone/:userId", async (req, res) => {
   }
 });
 
-// =========================
-//    PHOTO OF THE DAY
-// =========================
-// REPLACE your /api/photoOfTheDay endpoint in server.js with this:
-
-// =========================
 //    PHOTO OF THE DAY
 // =========================
 app.get("/api/photoOfTheDay", async (req, res) => {
@@ -188,6 +182,41 @@ app.get("/api/photoOfTheDay", async (req, res) => {
       description: "The Horsehead Nebula is one of the most identifiable nebulae in the sky.",
       credits: "NASA, ESA, Hubble Heritage Team",
     });
+  }
+});
+// =========================
+//    GET ALL PHOTOS (Gallery)
+// =========================
+app.get("/api/photos", async (req, res) => {
+  try {
+    console.log("📸 Fetching all photos for gallery...");
+    
+    const allPhotos = await db
+      .select()
+      .from(photoOfTheDayTable)
+      .orderBy(sql`${photoOfTheDayTable.date} DESC`);
+
+    if (!allPhotos || allPhotos.length === 0) {
+      console.log("⚠️ No photos in database");
+      return res.status(200).json([]);
+    }
+
+    console.log(`✅ Found ${allPhotos.length} photos`);
+    
+    // Map to match frontend expectations (url instead of image)
+    const photos = allPhotos.map(photo => ({
+      id: photo.id,
+      title: photo.title,
+      url: photo.image,  // Map 'image' column to 'url' for frontend
+      description: photo.description || "",
+      credits: photo.credits || "",
+      date: photo.date
+    }));
+
+    res.status(200).json(photos);
+  } catch (error) {
+    console.error("❌ Error fetching all photos:", error.message);
+    res.status(500).json({ error: "Failed to fetch photos" });
   }
 });
 
