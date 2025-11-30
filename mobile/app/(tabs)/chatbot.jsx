@@ -7,6 +7,7 @@ import {
   StyleSheet,
   ActivityIndicator,
 } from "react-native";
+import SafeAreaWrapper from "../components/safeAreaWrapper";
 import { COLORS } from "../../constants/colors";
 import { AI_API_URL } from "../../constants/api";
 
@@ -151,7 +152,7 @@ export default function ChatBot() {
   };
 
   return (
-    <View style={styles.container}>
+    <SafeAreaWrapper style={styles.container}>
       <ScrollView ref={scrollRef} style={styles.chat}>
         {messages.map((msg, index) => (
           <View
@@ -212,7 +213,7 @@ export default function ChatBot() {
           </View>
         )}
       </ScrollView>
-    </View>
+    </SafeAreaWrapper>
   );
 }
 
@@ -222,7 +223,7 @@ export default function ChatBot() {
 const styles = StyleSheet.create({
   container: { 
     flex: 1, 
-    backgroundColor: COLORS.background  
+    backgroundColor: COLORS.background  // Use app background
   },
 
   chat: { 
