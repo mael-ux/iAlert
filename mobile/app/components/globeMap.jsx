@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from "react";
 import { View, StyleSheet, ActivityIndicator, Modal, Text, TouchableOpacity, ScrollView } from "react-native";
 import { WebView } from "react-native-webview";
+import { useNavigation } from '@react-navigation/native';
 import { COLORS } from "../../constants/colors";
 import { Ionicons } from "@expo/vector-icons";
 
@@ -33,11 +34,23 @@ const DISASTER_INFO = {
 };
 
 export default function GlobeMap({ style }) {
+  const navigation = useNavigation();
   const [htmlContent, setHtmlContent] = useState(null);
   const [loading, setLoading] = useState(true);
   const [modalVisible, setModalVisible] = useState(false);
   const [selectedEvent, setSelectedEvent] = useState(null);
   const [disastersData, setDisastersData] = useState([]);
+
+  // Hide tab bar on this screen
+  useEffect(() => {
+    const parent = navigation?.getParent();
+    if (parent) {
+      parent.setOptions({ tabBarStyle: { display: 'none' } });
+      return () => {
+        parent.setOptions({ tabBarStyle: undefined });
+      };
+    }
+  }, []);
 
   useEffect(() => {
     fetchDisasters();

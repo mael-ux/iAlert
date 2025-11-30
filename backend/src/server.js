@@ -20,6 +20,13 @@ import { healthCheckJob, photoJob } from "./config/cron.js";
 import fetch from "node-fetch";
 
 const app = express();
+import webhooksRouter from "./routes/webhooks.js";
+
+// Raw body for webhook verification
+app.use("/api/webhooks", express.raw({ type: "application/json" }), webhooksRouter);
+
+// Now add your normal middleware
+app.use(express.json());
 const PORT = ENV.PORT || 8001;
 
 // FIXED: Start cron jobs in production
@@ -30,8 +37,6 @@ if (ENV.NODE_ENV === "production") {
   // eonetCheckJob.start(); // Uncomment if you have this
   console.log("Cron jobs started successfully");
 }
-
-app.use(express.json());
 
 // =========================
 //    HEALTH CHECK
@@ -299,7 +304,7 @@ app.post("/api/get-weather", async (req, res) => {
     res.status(500).json({ error: "Internal server error" });
   }
 });
-app.use("/api/webhooks", express.raw({ type: "application/json" }), webhooksRouter);
+
 
 // =========================
 //    ALERTS ROUTER
