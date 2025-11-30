@@ -5,7 +5,17 @@ import { View, StyleSheet, ActivityIndicator, Modal, Text, TouchableOpacity, Scr
 import { WebView } from "react-native-webview";
 import { COLORS } from "../../constants/colors";
 import { Ionicons } from "@expo/vector-icons";
-import { AI_API_URL } from "../../constants/api";
+
+// Import AI_API_URL with fallback
+let AI_API_URL;
+try {
+  const imported = require("../../constants/ai-api");
+  AI_API_URL = imported.AI_API_URL;
+} catch (e) {
+  // Fallback if constants file doesn't exist
+  AI_API_URL = "https://ialert-ai-service.onrender.com/api";
+  console.warn("⚠️ Using fallback AI_API_URL");
+}
 
 const DISASTER_INFO = {
   wildfires: { name: "Wildfire", color: "#ff4500", emoji: "🔥" },
@@ -39,6 +49,7 @@ export default function GlobeMap({ style }) {
       console.log('🌍 Fetching disasters from backend...');
       
       // Fetch from YOUR backend (not EONET directly - that's blocked!)
+      // NOTE: Using /api prefix to match backend route
       const response = await fetch(`${AI_API_URL}/disasters`);
       
       if (!response.ok) {
