@@ -21,9 +21,15 @@ router.post("/clerk", async (req, res) => {
     return res.status(400).json({ error: "Missing svix headers" });
   }
 
-  // Get the body
-  const payload = req.body;
-  const body = JSON.stringify(payload);
+  // Get the body - it should be a Buffer from express.raw()
+  let body;
+  if (Buffer.isBuffer(req.body)) {
+    body = req.body.toString('utf8');
+  } else if (typeof req.body === 'string') {
+    body = req.body;
+  } else {
+    body = JSON.stringify(req.body);
+  }
 
   // Create a new Svix instance with your webhook secret
   const wh = new Webhook(ENV.CLERK_WEBHOOK_SECRET);
