@@ -42,7 +42,8 @@
       "permissions": [
         "android.permission.INTERNET",
         "android.permission.ACCESS_COARSE_LOCATION",
-        "android.permission.ACCESS_FINE_LOCATION"
+        "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.CAMERA"
       ]
     },
     "web": {
@@ -55,7 +56,9 @@
         {
           "icon": "./assets/images/icon.png",
           "color": "#740000",
-          "sounds": ["./assets/sounds/alert.wav"]
+          "sounds": [
+            "./assets/sounds/alert.wav"
+          ]
         }
       ],
       "expo-router",
@@ -78,7 +81,13 @@
           "locationAlwaysAndWhenInUsePermission": "Allow $(PRODUCT_NAME) to use your location."
         }
       ],
-      "expo-secure-store"
+      "expo-secure-store",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Permitir que $(PRODUCT_NAME) acceda a la cámara para activar el flash en alertas de emergencia."
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,

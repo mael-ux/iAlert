@@ -1,9 +1,13 @@
 {
   "dependencies": {
     "@react-native-async-storage/async-storage": "^2.2.0",
+    "@react-native-community/slider": "5.0.1",
     "expo": "^54.0.20",
+    "expo-av": "~16.0.7",
+    "expo-camera": "~17.0.9",
     "expo-image-picker": "~17.0.8",
     "expo-localization": "^17.0.7",
+    "expo-notifications": "~0.32.13",
     "globe.gl": "^2.44.1",
     "go": "^3.0.1",
     "i18next": "^25.6.3",
