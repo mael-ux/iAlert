@@ -1,6 +1,9 @@
+// mobile/app/support.jsx
 import React from 'react';
 import { View, Text, StyleSheet, ScrollView, Linking, TouchableOpacity } from 'react-native';
 import { useTheme } from './ThemeContext'; 
+import SafeAreaWrapper from './components/safeAreaWrapper'; // Added
+import CustomHeader from './components/customHeader';       // Added
 
 // Datos de contacto estructurados
 const contacts = [
@@ -36,21 +39,28 @@ const handleEmailPress = (email) => {
   Linking.openURL(`mailto:${email}`);
 };
 
-
 export default function SupportScreen() {
   const { theme } = useTheme();
 
   return (
-    <ScrollView style={{ backgroundColor: theme.background }}>
-      <View style={styles.container}>
-        <Text style={[styles.title, { color: theme.text }]}>Soporte iAlert — Contactos</Text>
+    <SafeAreaWrapper style={[styles.container, { backgroundColor: theme.background }]}>
+      {/* Header Implementation */}
+      <CustomHeader title="Soporte iAlert" backTo="/(tabs)/user" />
+
+      <ScrollView contentContainerStyle={styles.scrollContent}>
         <Text style={[styles.subtitle, { color: theme.textLight }]}>
           Presiona cualquier correo electrónico para iniciar un mensaje.
         </Text>
 
         {/* Mapeo de las categorías de contacto */}
         {contacts.map((group, index) => (
-          <View key={index} style={styles.contactGroup}>
+          <View 
+            key={index} 
+            style={[
+              styles.contactGroup, 
+              { borderLeftColor: theme.primary || '#007aff' } // Dynamic theme color
+            ]}
+          >
             <Text style={[styles.categoryTitle, { color: theme.primary || '#007aff' }]}>
               {group.category}
             </Text>
@@ -69,51 +79,53 @@ export default function SupportScreen() {
             ))}
           </View>
         ))}
-      </View>
-    </ScrollView>
+        
+        {/* Extra space at bottom */}
+        <View style={{ height: 20 }} />
+      </ScrollView>
+    </SafeAreaWrapper>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    // Removed paddingTop: 50 (handled by CustomHeader/SafeArea)
+  },
+  scrollContent: {
     padding: 20,
-    paddingTop: 50,
+    paddingTop: 10,
   },
-  title: {
-    fontSize: 24,
-    fontWeight: '800',
-    marginBottom: 5,
-    textAlign: 'center',
-  },
+  // Removed 'title' style (handled by CustomHeader)
   subtitle: {
     fontSize: 14,
     marginBottom: 30,
     textAlign: 'center',
+    lineHeight: 20,
   },
   contactGroup: {
     marginBottom: 25,
-    paddingHorizontal: 10,
-    borderLeftWidth: 3, // Línea decorativa
-    borderLeftColor: '#007aff', // Usar un color fijo o theme.primary
+    paddingHorizontal: 16,
+    borderLeftWidth: 4, // Slightly thicker for better visibility
+    // Color is handled dynamically inline
   },
   categoryTitle: {
     fontSize: 18,
     fontWeight: '700',
-    marginBottom: 8,
-    paddingLeft: 10,
+    marginBottom: 12,
   },
   personRow: {
-    marginBottom: 10,
-    paddingLeft: 10,
+    marginBottom: 12,
   },
   nameText: {
     fontSize: 16,
     fontWeight: '600',
+    marginBottom: 2,
   },
   emailText: {
     fontSize: 14,
-    textDecorationLine: 'underline', // Subrayado para indicar que es clickeable
+    textDecorationLine: 'underline',
     marginTop: 2,
+    opacity: 0.8,
   }
 });

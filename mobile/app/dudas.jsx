@@ -1,7 +1,19 @@
+// mobile/app/nasa.jsx (renamed or pasted into your FAQ file)
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, LayoutAnimation, Platform, UIManager } from 'react-native';
-import { useTheme } from './ThemeContext'; // Asumiendo que esta ruta es correcta
-import { MaterialIcons } from '@expo/vector-icons'; // Necesitarás instalar @expo/vector-icons si no lo tienes
+import { 
+  View, 
+  Text, 
+  StyleSheet, 
+  TouchableOpacity, 
+  LayoutAnimation, 
+  Platform, 
+  UIManager,
+  ScrollView // Added ScrollView
+} from 'react-native';
+import { useTheme } from './ThemeContext';
+import { MaterialIcons } from '@expo/vector-icons';
+import SafeAreaWrapper from './components/safeAreaWrapper'; // Import Added
+import CustomHeader from './components/customHeader';       // Import Added
 
 // Activar animaciones en Android para LayoutAnimation
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
@@ -21,10 +33,13 @@ const AccordionItem = ({ question, answer }) => {
   };
 
   return (
-    <View style={styles.accordionContainer}>
+    <View style={[
+      styles.accordionContainer, 
+      { borderColor: theme.border || '#E0E0E0' } // Use theme border if available
+    ]}>
       {/* 1. Botón de Pregunta */}
       <TouchableOpacity
-        style={[styles.questionButton, { backgroundColor: theme.cardBackground || theme.surface }]}
+        style={[styles.questionButton, { backgroundColor: theme.card || theme.surface }]} // Changed to theme.card for consistency
         onPress={toggleExpand}
         activeOpacity={0.7}
       >
@@ -39,8 +54,8 @@ const AccordionItem = ({ question, answer }) => {
 
       {/* 2. Respuesta que se muestra condicionalmente */}
       {expanded && (
-        <View style={[styles.answerView, { backgroundColor: theme.backgroundLight || theme.background }]}>
-          <Text style={[styles.answerText, { color: theme.textLight }]}>{answer}</Text>
+        <View style={[styles.answerView, { backgroundColor: theme.background || '#f9f9f9', borderColor: theme.border || '#E0E0E0' }]}>
+          <Text style={[styles.answerText, { color: theme.textLight || theme.text }]}>{answer}</Text>
         </View>
       )}
     </View>
@@ -96,20 +111,25 @@ export default function AlertsScreen() {
   ];
 
   return (
-    <View style={[styles.container, { backgroundColor: theme.background }]}>
-      <Text style={[styles.title, { color: theme.text }]}>Preguntas Frecuentes(FAQ)</Text>
+    <SafeAreaWrapper style={[styles.container, { backgroundColor: theme.background }]}>
+      {/* Added Custom Header */}
+      <CustomHeader title="Preguntas Frecuentes" backTo="/(tabs)/user" />
       
-
-
-      {/* Mapeo de los datos para crear los componentes de acordeón */}
-      {faqData.map(item => (
-        <AccordionItem 
-          key={item.id} 
-          question={item.question} 
-          answer={item.answer} 
-        />
-      ))}
-    </View>
+      {/* Wrapped in ScrollView so you can see all items */}
+      <ScrollView 
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+      >
+        {/* Mapeo de los datos para crear los componentes de acordeón */}
+        {faqData.map(item => (
+          <AccordionItem 
+            key={item.id} 
+            question={item.question} 
+            answer={item.answer} 
+          />
+        ))}
+      </ScrollView>
+    </SafeAreaWrapper>
   );
 }
 
@@ -117,50 +137,37 @@ export default function AlertsScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    padding: 20,
-    paddingTop: 50,
+    // Removed paddingTop: 50 because CustomHeader and SafeAreaWrapper handle this now
   },
-  title: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    marginBottom: 40,
-    textAlign: 'center',
+  scrollContent: {
+    padding: 20, // Padding moved here for the scroll view
+    paddingBottom: 40,
   },
-  subtitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    marginTop: 20,
-    marginBottom: 10,
-  },
-  text: {
-    fontSize: 16,
-    textAlign: 'center',
-  },
+  // Removed 'title' style because CustomHeader handles the title now
   
   // --- Estilos del Acordeón ---
   accordionContainer: {
     width: '100%',
-    marginBottom: 8,
-    borderRadius: 8,
-    overflow: 'hidden', // Importante para el diseño
+    marginBottom: 12,
+    borderRadius: 12, // Increased radius for modern look
+    overflow: 'hidden',
     borderWidth: 1,
-    borderColor: '#E0E0E0', // Puedes hacerlo dinámico con el tema
   },
   questionButton: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: 15,
+    padding: 16,
   },
   questionText: {
     flex: 1,
     fontSize: 16,
     fontWeight: '600',
+    marginRight: 8,
   },
   answerView: {
-    padding: 15,
+    padding: 16,
     borderTopWidth: 1,
-    borderColor: '#E0E0E0',
   },
   answerText: {
     fontSize: 15,
