@@ -1,4 +1,3 @@
-// mobile/app/alert-settings.jsx
 import React, { useState, useEffect, useRef } from 'react';
 import { 
   View, Text, StyleSheet, Switch, ScrollView, 
@@ -46,9 +45,13 @@ export default function AlertSettingsScreen() {
   const [isSaving, setIsSaving] = useState(false);
   const [sound, setSound] = useState(null);
   const [isAlarmPlaying, setIsAlarmPlaying] = useState(false);
-  const [flashEnabled, setFlashEnabled] = useState(false);
+  
+  // Flashlight State
+  const [flashEnabled, setFlashEnabled] = useState(false); // Controls if Camera is mounted
+  const [isTorchOn, setIsTorchOn] = useState(false);       // Controls the actual light (blinking)
   
   const soundRef = useRef(null);
+  const blinkInterval = useRef(null); // Timer for blinking
   const [permission, requestPermission] = useCameraPermissions();
 
   const [config, setConfig] = useState({
@@ -68,8 +71,13 @@ export default function AlertSettingsScreen() {
     }
     
     return () => {
+      // Cleanup sound
       if (soundRef.current) {
         soundRef.current.unloadAsync();
+      }
+      // Cleanup blink timer
+      if (blinkInterval.current) {
+        clearInterval(blinkInterval.current);
       }
     };
   }, [user]);
@@ -120,6 +128,15 @@ export default function AlertSettingsScreen() {
   };
 
   const stopAlarm = async () => {
+    // 1. Stop Blinking
+    if (blinkInterval.current) {
+      clearInterval(blinkInterval.current);
+      blinkInterval.current = null;
+    }
+    setIsTorchOn(false);
+    setFlashEnabled(false);
+
+    // 2. Stop Sound
     try {
       if (soundRef.current) {
         await soundRef.current.stopAsync();
@@ -134,8 +151,9 @@ export default function AlertSettingsScreen() {
     } catch (err) {
       console.log('Error stopping sound', err);
     }
+
+    // 3. Stop Vibration and UI
     Vibration.cancel();
-    setFlashEnabled(false);
     setIsAlarmPlaying(false);
     console.log('🛑 Alarm stopped');
   };
@@ -169,6 +187,7 @@ export default function AlertSettingsScreen() {
       setIsAlarmPlaying(true);
       console.log('🔊 Alarm sound playing');
 
+      // Auto-stop audio after 30s
       setTimeout(() => {
         if (soundRef.current) {
           stopAlarm();
@@ -189,47 +208,28 @@ export default function AlertSettingsScreen() {
   const testAlert = async () => {
     try {
       console.log('🧪 Testing alert...');
-      console.log('Config:', { 
-        flash: config.flashEnabled, 
-        sound: config.soundEnabled, 
-        vibrate: config.vibrateEnabled,
-        alarmMode: config.alarmMode 
-      });
-
-      // 1. Handle flash if enabled
+      
+      // 1. Handle Flash (Strobing Logic)
       if (config.flashEnabled && Platform.OS !== 'web') {
-        console.log('📸 Flash is enabled in config');
         console.log('Permission status:', permission);
         
         if (!permission?.granted) {
-          console.log('❌ Permission not granted, requesting...');
           const result = await requestPermission();
-          console.log('Permission result:', result);
-          
           if (!result?.granted) {
-            Alert.alert(
-              'Permiso Necesario',
-              'Necesitas activar el permiso de cámara para usar el flash.',
-              [
-                { text: 'Cancelar', style: 'cancel' },
-                { text: 'Configuración', onPress: () => {
-                  if (Platform.OS === 'ios') {
-                    Linking.openURL('app-settings:');
-                  } else {
-                    Linking.openSettings();
-                  }
-                }}
-              ]
-            );
+            Alert.alert('Permiso Necesario', 'Necesitas activar el permiso de cámara para usar el flash.');
             return;
           }
         }
         
-        console.log('✅ Permission granted, enabling flash...');
-        setFlashEnabled(true);
-        console.log('🔦 Flash state set to true');
-      } else {
-        console.log('Flash not enabled or platform is web');
+        console.log('✅ Permission granted, starting strobe...');
+        setFlashEnabled(true); // Mount camera
+        setIsTorchOn(true);    // Turn on initially
+
+        // Start Blinking Loop
+        if (blinkInterval.current) clearInterval(blinkInterval.current);
+        blinkInterval.current = setInterval(() => {
+          setIsTorchOn(prev => !prev);
+        }, 500); // Toggle every 500ms
       }
 
       // 2. Get location
@@ -250,6 +250,7 @@ export default function AlertSettingsScreen() {
 
       // 3. Alarm Mode vs Single Notification
       if (config.alarmMode) {
+        // --- ALARM MODE ---
         if (config.vibrateEnabled) {
           Vibration.vibrate([0, 500, 200, 500, 200, 500], true);
         }
@@ -271,7 +272,7 @@ export default function AlertSettingsScreen() {
 
         Alert.alert(
           '🚨 ALARMA ACTIVADA',
-          `La alarma está sonando.\n\n• Vibración: ${config.vibrateEnabled ? 'Sí' : 'No'}\n• Sonido: ${config.soundEnabled ? 'Sí' : 'No'} (${config.soundLevel}%)\n• Flash: ${flashEnabled ? 'Sí ✅' : config.flashEnabled ? 'Activando...' : 'No'}`,
+          `La alarma está sonando.\n\n• Vibración: ${config.vibrateEnabled ? 'Sí' : 'No'}\n• Sonido: ${config.soundEnabled ? 'Sí' : 'No'}\n• Flash: ${config.flashEnabled ? 'Parpadeando ✅' : 'No'}`,
           [
             {
               text: 'DETENER ALARMA',
@@ -283,6 +284,7 @@ export default function AlertSettingsScreen() {
         );
 
       } else {
+        // --- SINGLE NOTIFICATION MODE ---
         if (config.vibrateEnabled) {
           Vibration.vibrate([0, 500, 200, 500]);
         }
@@ -299,10 +301,16 @@ export default function AlertSettingsScreen() {
 
         Alert.alert('✅ Alerta Enviada', 'Notificación de prueba enviada.');
         
-        if (flashEnabled) {
+        // If flash was started above, stop it after 5 seconds
+        if (config.flashEnabled && Platform.OS !== 'web') {
           setTimeout(() => {
+            if (blinkInterval.current) {
+              clearInterval(blinkInterval.current);
+              blinkInterval.current = null;
+            }
+            setIsTorchOn(false);
             setFlashEnabled(false);
-            console.log('🔦 Flash disabled (single mode)');
+            console.log('🔦 Flash disabled (single mode timeout)');
           }, 5000);
         }
       }
@@ -436,7 +444,7 @@ export default function AlertSettingsScreen() {
               <View style={{ marginLeft: 12, flex: 1 }}>
                 <Text style={[styles.settingLabel, { color: theme.text }]}>Flash</Text>
                 <Text style={[styles.settingHint, { color: theme.textLight }]}>
-                  {flashEnabled ? '🔦 Activo' : 'Requiere permiso de cámara'}
+                  {flashEnabled ? (isTorchOn ? '🔦 Parpadeando...' : '🔦 Preparado') : 'Requiere permiso de cámara'}
                 </Text>
               </View>
             </View>
@@ -509,12 +517,15 @@ export default function AlertSettingsScreen() {
         <View style={{ height: 40 }} />
       </ScrollView>
 
-      {/* Flash Camera - Positioned off-screen */}
+      {/* Flash Camera Component
+        - Uses 1x1 pixel size + opacity 0 to stay active (OS often kills off-screen cameras)
+        - Uses 'enableTorch' (correct prop) controlled by 'isTorchOn' (strobing state)
+      */}
       {flashEnabled && permission?.granted && (
         <View style={styles.flashCamera}>
           <CameraView 
             style={styles.flashCameraView}
-            torch="on"
+            enableTorch={isTorchOn}
             facing="back"
           />
         </View>
@@ -547,15 +558,17 @@ const styles = StyleSheet.create({
   testButtonText: { fontSize: 16, fontWeight: '600' },
   stopButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', padding: 16, borderRadius: 12, margin: 16, marginTop: 0, gap: 12 },
   stopButtonText: { fontSize: 16, fontWeight: '700' },
+  
+  // Updated Camera Styles
   flashCamera: {
     position: 'absolute',
-    top: -1000,
-    left: -1000,
-    width: 200,
-    height: 200,
+    width: 1,
+    height: 1,
+    opacity: 0,
+    zIndex: -1,
   },
   flashCameraView: {
-    width: 200,
-    height: 200,
+    width: 1,
+    height: 1,
   },
 });
