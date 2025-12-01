@@ -1,12 +1,27 @@
 import { Tabs, Redirect } from "expo-router";
 import { useAuth } from "@clerk/clerk-expo";
 import { Ionicons } from "@expo/vector-icons";
-import { COLORS } from "../../constants/colors";
+import { useTheme } from "../ThemeContext"; // Import Theme Context
+import { View, ActivityIndicator } from "react-native";
 
 export default function TabsLayout() {
   const { isSignedIn, isLoaded } = useAuth();
+  const { theme } = useTheme(); // Use Theme Hook
  
-  if (!isLoaded) return null;
+  if (!isLoaded) {
+    return (
+      <View 
+        style={{ 
+          flex: 1, 
+          justifyContent: "center", 
+          alignItems: "center", 
+          backgroundColor: theme.background 
+        }}
+      >
+        <ActivityIndicator size="large" color={theme.primary} />
+      </View>
+    );
+  }
 
   // If not signed in, go to auth
   if (!isSignedIn) return <Redirect href="/(auth)/sign-in" />;
@@ -16,11 +31,11 @@ export default function TabsLayout() {
       initialRouteName="index"
       screenOptions={{
         headerShown: false,
-        tabBarActiveTintColor: COLORS.primary,
-        tabBarInactiveTintColor: COLORS.textLight,
+        tabBarActiveTintColor: theme.primary, // Dynamic primary color
+        tabBarInactiveTintColor: theme.textLight, // Dynamic inactive color
         tabBarStyle: {
-          backgroundColor: COLORS.white,
-          borderTopColor: COLORS.border,
+          backgroundColor: theme.card, // Dynamic background (Card color usually looks best for nav bars)
+          borderTopColor: theme.border, // Dynamic border
           borderTopWidth: 1,
           paddingBottom: 8,
           paddingTop: 8,

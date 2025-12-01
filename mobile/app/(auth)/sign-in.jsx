@@ -1,4 +1,4 @@
-import { useSignIn, useOAuth } from "@clerk/clerk-expo"; // <-- Import useOAuth
+import { useSignIn, useOAuth } from "@clerk/clerk-expo";
 import { useRouter } from "expo-router";
 import { useState } from "react";
 import {
@@ -6,23 +6,25 @@ import {
   Text,
   Alert,
   KeyboardAvoidingView,
-  Platform, // <-- Import Platform
+  Platform,
   ScrollView,
   TextInput,
   TouchableOpacity,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { Image } from "expo-image";
-import * as WebBrowser from "expo-web-browser"; // <-- Import WebBrowser
+import * as WebBrowser from "expo-web-browser";
 
 import { authStyles } from "../../assets/styles/auth.styles";
-import { COLORS } from "../../constants/colors";
+import { useTheme } from "../ThemeContext"; // Import Theme Context
+import SafeAreaWrapper from "../components/safeAreaWrapper"; // Import SafeAreaWrapper
 
 // This is required for Apple Sign In to work on iOS
 WebBrowser.maybeCompleteAuthSession();
 
 const SignInScreen = () => {
   const router = useRouter();
+  const { theme } = useTheme(); // Use Theme Hook
 
   const { signIn, setActive, isLoaded } = useSignIn();
 
@@ -90,7 +92,7 @@ const SignInScreen = () => {
   };
 
   return (
-    <View style={authStyles.container}>
+    <SafeAreaWrapper style={[authStyles.container, { backgroundColor: theme.background }]}>
       <KeyboardAvoidingView
         behavior={Platform.OS === "ios" ? "padding" : "height"}
         style={authStyles.keyboardView}
@@ -109,16 +111,22 @@ const SignInScreen = () => {
             />
           </View>
 
-          <Text style={authStyles.title}>Welcome Back</Text>
+          <Text style={[authStyles.title, { color: theme.text }]}>Welcome Back</Text>
 
-          {/* --- THIS BLOCK MOVED UP --- */}
           <View style={authStyles.formContainer}>
             {/* Email Input */}
             <View style={authStyles.inputContainer}>
               <TextInput
-                style={authStyles.textInput}
+                style={[
+                  authStyles.textInput, 
+                  { 
+                    backgroundColor: theme.card, 
+                    color: theme.text, 
+                    borderColor: theme.border 
+                  }
+                ]}
                 placeholder="Enter email"
-                placeholderTextColor={COLORS.textLight}
+                placeholderTextColor={theme.textLight}
                 value={email}
                 onChangeText={setEmail}
                 keyboardType="email-address"
@@ -129,9 +137,16 @@ const SignInScreen = () => {
             {/* PASSWORD INPUT */}
             <View style={authStyles.inputContainer}>
               <TextInput
-                style={authStyles.textInput}
+                style={[
+                  authStyles.textInput, 
+                  { 
+                    backgroundColor: theme.card, 
+                    color: theme.text, 
+                    borderColor: theme.border 
+                  }
+                ]}
                 placeholder="Enter password"
-                placeholderTextColor={COLORS.textLight}
+                placeholderTextColor={theme.textLight}
                 value={password}
                 onChangeText={setPassword}
                 secureTextEntry={!showPassword}
@@ -144,47 +159,52 @@ const SignInScreen = () => {
                 <Ionicons
                   name={showPassword ? "eye-outline" : "eye-off-outline"}
                   size={20}
-                  color={COLORS.textLight}
+                  color={theme.textLight}
                 />
               </TouchableOpacity>
             </View>
+
             <TouchableOpacity
-  onPress={() => router.push("/(auth)/forgot-password")}
-  style={{ alignSelf: 'flex-end', marginBottom: 15 }}
->
-  <Text style={{ color: COLORS.primary, fontSize: 14 }}>
-    Forgot Password?
-  </Text>
-</TouchableOpacity>
+              onPress={() => router.push("/(auth)/forgot-password")}
+              style={{ alignSelf: 'flex-end', marginBottom: 15 }}
+            >
+              <Text style={{ color: theme.primary, fontSize: 14 }}>
+                Forgot Password?
+              </Text>
+            </TouchableOpacity>
             
             <TouchableOpacity
-              style={[authStyles.authButton, loading && authStyles.buttonDisabled]}
+              style={[
+                authStyles.authButton, 
+                { backgroundColor: theme.primary },
+                loading && authStyles.buttonDisabled
+              ]}
               onPress={handleSignIn}
               disabled={loading}
               activeOpacity={0.8}
             >
-              <Text style={authStyles.buttonText}>{loading ? "Signing In..." : "Sign In"}</Text>
+              <Text style={[authStyles.buttonText, { color: theme.white }]}>
+                {loading ? "Signing In..." : "Sign In"}
+              </Text>
             </TouchableOpacity>
           </View>
 
-          {/* --- DIVIDER MOVED DOWN --- */}
           <View style={authStyles.dividerContainer}>
-            <View style={authStyles.dividerLine} />
-            <Text style={authStyles.dividerText}>OR</Text>
-            <View style={authStyles.dividerLine} />
+            <View style={[authStyles.dividerLine, { backgroundColor: theme.border }]} />
+            <Text style={[authStyles.dividerText, { color: theme.textLight }]}>OR</Text>
+            <View style={[authStyles.dividerLine, { backgroundColor: theme.border }]} />
           </View>
 
-          {/* --- SOCIAL BUTTONS MOVED DOWN --- */}
           <View style={authStyles.socialContainer}>
             <TouchableOpacity
-              style={[authStyles.socialButton, { backgroundColor: COLORS.white }]}
+              style={[authStyles.socialButton, { backgroundColor: theme.card, borderColor: theme.border, borderWidth: 1 }]}
               onPress={() => onSocialSignIn('google')}
             >
               <Image 
                 source={require("../../assets/images/google.png")} 
                 style={authStyles.socialIcon}
               />
-              <Text style={[authStyles.socialButtonText, { color: '#000' }]}>
+              <Text style={[authStyles.socialButtonText, { color: theme.text }]}>
                 Sign in with Google
               </Text>
             </TouchableOpacity>
@@ -206,19 +226,19 @@ const SignInScreen = () => {
             )}
           </View>
 
-          {/* --- SIGN UP LINK STAYS AT THE BOTTOM --- */}
           <TouchableOpacity
             style={authStyles.linkContainer}
             onPress={() => router.push("/(auth)/sign-up")}
           >
-            <Text style={authStyles.linkText}>
-              Don&apos;t have an account? <Text style={authStyles.link}>Sign up</Text>
+            <Text style={[authStyles.linkText, { color: theme.text }]}>
+              Don&apos;t have an account? <Text style={[authStyles.link, { color: theme.primary }]}>Sign up</Text>
             </Text>
           </TouchableOpacity>
 
         </ScrollView>
       </KeyboardAvoidingView>
-    </View>
+    </SafeAreaWrapper>
   );
 };
+
 export default SignInScreen;

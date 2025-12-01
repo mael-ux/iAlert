@@ -65,14 +65,14 @@ const mintTheme = {
 };
 
 const midnightTheme = {
-  primary: "#2C3E50",
-  background: "#F4F6F7",
-  text: "#1A2530",
-  border: "#D5D8DC",
-  white: "#FFFFFF",
-  textLight: "#7F8C8D",
-  card: "#FFFFFF",
-  shadow: "#000000",
+  primary: "#5DADE2",    // Light Blue (Brightened to pop against dark bg)
+  background: "#0F172A", // Deep Midnight Blue (Slate 900)
+  text: "#F1F5F9",       // Off-White (Slate 100 - easier on eyes than pure white)
+  border: "#334155",     // Dark Blue-Grey border
+  white: "#FFFFFF",      // Stays white (for text inside primary buttons)
+  textLight: "#94A3B8",  // Muted Blue-Grey (Slate 400)
+  card: "#1E293B",       // Lighter Midnight Blue (Slate 800 - creates depth)
+  shadow: "#000000",     // Shadow stays black
 };
 
 const roseGoldTheme = {

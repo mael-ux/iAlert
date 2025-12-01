@@ -19,10 +19,14 @@ import * as WebBrowser from "expo-web-browser";
 import { Ionicons } from "@expo/vector-icons";
 import VerifyEmail from "./verify-email";
 
+import { useTheme } from "../ThemeContext"; // Import Theme Context
+import SafeAreaWrapper from "../components/safeAreaWrapper"; // Import SafeAreaWrapper
+
 WebBrowser.maybeCompleteAuthSession();
 
 const SignUpScreen = () => {
   const router = useRouter();
+  const { theme } = useTheme(); // Use Theme Hook
   const { isLoaded, signUp } = useSignUp();
 
   const [firstName, setFirstName] = useState("");
@@ -92,7 +96,7 @@ const SignUpScreen = () => {
     return <VerifyEmail email={email} onBack={() => setPendingVerification(false)} />;
 
   return (
-    <View style={authStyles.container}>
+    <SafeAreaWrapper style={[authStyles.container, { backgroundColor: theme.background }]}>
       <KeyboardAvoidingView
         behavior={Platform.OS === "ios" ? "padding" : "height"}
         keyboardVerticalOffset={Platform.OS === "ios" ? 64 : 0}
@@ -104,14 +108,21 @@ const SignUpScreen = () => {
           scrollEnabled={false} 
         >
 
-          <Text style={authStyles.title}>Create Account</Text>
+          <Text style={[authStyles.title, { color: theme.text }]}>Create Account</Text>
 
           <View style={authStyles.formContainer}>
             <View style={authStyles.inputContainer}>
               <TextInput
-                style={authStyles.textInput}
+                style={[
+                  authStyles.textInput, 
+                  { 
+                    backgroundColor: theme.card, 
+                    color: theme.text, 
+                    borderColor: theme.border 
+                  }
+                ]}
                 placeholder="First name"
-                placeholderTextColor={COLORS.textLight}
+                placeholderTextColor={theme.textLight}
                 value={firstName}
                 onChangeText={setFirstName}
                 autoCapitalize="words"
@@ -120,9 +131,16 @@ const SignUpScreen = () => {
             
             <View style={authStyles.inputContainer}>
               <TextInput
-                style={authStyles.textInput}
+                style={[
+                  authStyles.textInput, 
+                  { 
+                    backgroundColor: theme.card, 
+                    color: theme.text, 
+                    borderColor: theme.border 
+                  }
+                ]}
                 placeholder="Last name"
-                placeholderTextColor={COLORS.textLight}
+                placeholderTextColor={theme.textLight}
                 value={lastName}
                 onChangeText={setLastName}
                 autoCapitalize="words"
@@ -131,9 +149,16 @@ const SignUpScreen = () => {
 
             <View style={authStyles.inputContainer}>
               <TextInput
-                style={authStyles.textInput}
+                style={[
+                  authStyles.textInput, 
+                  { 
+                    backgroundColor: theme.card, 
+                    color: theme.text, 
+                    borderColor: theme.border 
+                  }
+                ]}
                 placeholder="Enter email"
-                placeholderTextColor={COLORS.textLight}
+                placeholderTextColor={theme.textLight}
                 value={email}
                 onChangeText={setEmail}
                 keyboardType="email-address"
@@ -143,9 +168,16 @@ const SignUpScreen = () => {
 
             <View style={authStyles.inputContainer}>
               <TextInput
-                style={authStyles.textInput}
+                style={[
+                  authStyles.textInput, 
+                  { 
+                    backgroundColor: theme.card, 
+                    color: theme.text, 
+                    borderColor: theme.border 
+                  }
+                ]}
                 placeholder="Enter password"
-                placeholderTextColor={COLORS.textLight}
+                placeholderTextColor={theme.textLight}
                 value={password}
                 onChangeText={setPassword}
                 secureTextEntry={!showPassword}
@@ -158,39 +190,43 @@ const SignUpScreen = () => {
                 <Ionicons
                   name={showPassword ? "eye-outline" : "eye-off-outline"}
                   size={20}
-                  color={COLORS.textLight}
+                  color={theme.textLight}
                 />
               </TouchableOpacity>
             </View>
 
             <TouchableOpacity
-              style={[authStyles.authButton, loading && authStyles.buttonDisabled]}
+              style={[
+                authStyles.authButton, 
+                { backgroundColor: theme.primary },
+                loading && authStyles.buttonDisabled
+              ]}
               onPress={handleSignUp}
               disabled={loading}
               activeOpacity={0.8}
             >
-              <Text style={authStyles.buttonText}>
+              <Text style={[authStyles.buttonText, { color: theme.white }]}>
                 {loading ? "Creating Account..." : "Sign Up"}
               </Text>
             </TouchableOpacity>
           </View>
 
           <View style={authStyles.dividerContainer}>
-            <View style={authStyles.dividerLine} />
-            <Text style={authStyles.dividerText}>OR</Text>
-            <View style={authStyles.dividerLine} />
+            <View style={[authStyles.dividerLine, { backgroundColor: theme.border }]} />
+            <Text style={[authStyles.dividerText, { color: theme.textLight }]}>OR</Text>
+            <View style={[authStyles.dividerLine, { backgroundColor: theme.border }]} />
           </View>
 
           <View style={authStyles.socialContainer}>
             <TouchableOpacity
-              style={[authStyles.socialButton, { backgroundColor: COLORS.white }]}
+              style={[authStyles.socialButton, { backgroundColor: theme.card, borderColor: theme.border, borderWidth: 1 }]}
               onPress={() => onSocialSignUp('google')}
             >
               <Image 
                 source={require("../../assets/images/google.png")}
                 style={authStyles.socialIcon}
               />
-              <Text style={[authStyles.socialButtonText, { color: '#000' }]}>
+              <Text style={[authStyles.socialButtonText, { color: theme.text }]}>
                 Sign up with Google
               </Text>
             </TouchableOpacity>
@@ -201,7 +237,7 @@ const SignUpScreen = () => {
                 onPress={() => onSocialSignUp('apple')}
               >
                 <Image
-                  source={require("../../assets/images/apple.png")}
+                  source={require("../../assets/images/Apple-Logo.png")}
                   style={authStyles.socialIcon}
                   tintColor="#fff"
                 />
@@ -213,13 +249,13 @@ const SignUpScreen = () => {
           </View>
 
           <TouchableOpacity style={authStyles.linkContainer} onPress={() => router.back()}>
-            <Text style={authStyles.linkText}>
-              Already have an account? <Text style={authStyles.link}>Sign In</Text>
+            <Text style={[authStyles.linkText, { color: theme.text }]}>
+              Already have an account? <Text style={[authStyles.link, { color: theme.primary }]}>Sign In</Text>
             </Text>
           </TouchableOpacity>
         </ScrollView>
       </KeyboardAvoidingView>
-    </View>
+    </SafeAreaWrapper>
   );
 };
 export default SignUpScreen;

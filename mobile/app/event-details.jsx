@@ -2,15 +2,18 @@
 import React from 'react';
 import { 
   View, Text, StyleSheet, ScrollView, 
-  TouchableOpacity, Linking 
+  TouchableOpacity, Linking, Platform 
 } from 'react-native';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { COLORS } from '../constants/colors';
+import { useTheme } from './ThemeContext'; 
+import SafeAreaWrapper from './components/safeAreaWrapper';
+import CustomHeader from './components/customHeader';
 
 export default function EventDetailsScreen() {
   const params = useLocalSearchParams();
   const router = useRouter();
+  const { theme } = useTheme(); // Use Theme Hook
 
   const {
     eventId,
@@ -33,77 +36,79 @@ export default function EventDetailsScreen() {
   };
 
   return (
-    <View style={styles.container}>
+    <SafeAreaWrapper style={[styles.container, { backgroundColor: theme.background }]}>
       <Stack.Screen options={{ headerShown: false }} />
       
-      {/* Header */}
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()}>
-          <Ionicons name="arrow-back" size={24} color={COLORS.primary} />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Detalles del Evento</Text>
-        <View style={{ width: 24 }} />
-      </View>
+      {/* Replaced manual header with CustomHeader */}
+      <CustomHeader title="Detalles del Evento" />
 
       <ScrollView style={styles.content}>
-        {/* Alerta */}
+        {/* Alerta - Red background usually stays red even in dark mode for importance */}
         <View style={styles.alertBanner}>
           <Ionicons name="warning" size={32} color="#fff" />
           <Text style={styles.alertTitle}>¡Alerta Activa!</Text>
         </View>
 
         {/* Título del Evento */}
-        <View style={styles.section}>
-          <Text style={styles.eventTitle}>{title}</Text>
+        <View style={[styles.section, { borderBottomColor: theme.border }]}>
+          <Text style={[styles.eventTitle, { color: theme.text }]}>{title}</Text>
           {disasterTitle && (
-            <Text style={styles.disasterType}>{disasterTitle}</Text>
+            <Text style={[styles.disasterType, { color: theme.textLight }]}>{disasterTitle}</Text>
           )}
         </View>
 
         {/* Nivel de Riesgo */}
         {riskLevel && (
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Nivel de Riesgo</Text>
-            <View style={styles.riskContainer}>
+          <View style={[styles.section, { borderBottomColor: theme.border }]}>
+            <Text style={[styles.sectionTitle, { color: theme.text }]}>Nivel de Riesgo</Text>
+            <View style={[styles.riskContainer, { backgroundColor: theme.card }]}>
               <View
                 style={[
                   styles.riskBar,
                   { width: `${parseFloat(riskLevel) * 10}%` }
                 ]}
               />
-              <Text style={styles.riskText}>{riskLevel}/10</Text>
+              <Text style={[styles.riskText, { color: theme.text }]}>{riskLevel}/10</Text>
             </View>
           </View>
         )}
 
         {/* Recomendaciones */}
-        <View style={styles.section}>
+        <View style={[styles.section, { borderBottomColor: theme.border }]}>
           <View style={styles.sectionHeader}>
-            <Ionicons name="shield-checkmark" size={24} color={COLORS.primary} />
-            <Text style={styles.sectionTitle}>Recomendaciones</Text>
+            <Ionicons name="shield-checkmark" size={24} color={theme.primary} />
+            <Text style={[styles.sectionTitle, { color: theme.text }]}>Recomendaciones</Text>
           </View>
+          {/* Warning card usually stays yellow/orange, but we ensure text is readable */}
           <View style={styles.recommendationCard}>
             <Text style={styles.recommendationText}>{recommendation}</Text>
           </View>
         </View>
 
         {/* Acciones */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Acciones</Text>
+        <View style={[styles.section, { borderBottomColor: 'transparent' }]}>
+          <Text style={[styles.sectionTitle, { color: theme.text }]}>Acciones</Text>
           
           {coordinates && (
-            <TouchableOpacity style={styles.actionButton} onPress={openMap}>
-              <Ionicons name="map-outline" size={20} color={COLORS.white} />
-              <Text style={styles.actionButtonText}>Ver en Mapa</Text>
+            <TouchableOpacity 
+              style={[styles.actionButton, { backgroundColor: theme.primary }]} 
+              onPress={openMap}
+            >
+              <Ionicons name="map-outline" size={20} color={theme.white} />
+              <Text style={[styles.actionButtonText, { color: theme.white }]}>Ver en Mapa</Text>
             </TouchableOpacity>
           )}
 
           <TouchableOpacity 
-            style={[styles.actionButton, styles.secondaryButton]}
+            style={[
+              styles.actionButton, 
+              styles.secondaryButton, 
+              { borderColor: theme.primary, backgroundColor: theme.card } // Adapted for dark mode
+            ]}
             onPress={() => Linking.openURL('tel:911')}
           >
-            <Ionicons name="call-outline" size={20} color={COLORS.primary} />
-            <Text style={[styles.actionButtonText, styles.secondaryButtonText]}>
+            <Ionicons name="call-outline" size={20} color={theme.primary} />
+            <Text style={[styles.actionButtonText, { color: theme.primary }]}>
               Llamar a Emergencias
             </Text>
           </TouchableOpacity>
@@ -111,42 +116,27 @@ export default function EventDetailsScreen() {
 
         {/* Información Adicional */}
         <View style={styles.section}>
-          <Text style={styles.infoText}>
+          <Text style={[styles.infoText, { color: theme.textLight }]}>
             ID del Evento: {eventId}
           </Text>
-          <Text style={styles.infoText}>
+          <Text style={[styles.infoText, { color: theme.textLight }]}>
             Recibido: {new Date().toLocaleString()}
           </Text>
         </View>
       </ScrollView>
-    </View>
+    </SafeAreaWrapper>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: COLORS.background,
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingTop: 60,
-    paddingBottom: 16,
-    paddingHorizontal: 16,
-    backgroundColor: COLORS.background,
-  },
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: COLORS.text,
   },
   content: {
     flex: 1,
   },
   alertBanner: {
-    backgroundColor: '#ff4444',
+    backgroundColor: '#ff4444', // Always red for danger
     padding: 20,
     alignItems: 'center',
     flexDirection: 'row',
@@ -161,22 +151,18 @@ const styles = StyleSheet.create({
   section: {
     padding: 16,
     borderBottomWidth: 1,
-    borderBottomColor: COLORS.border,
   },
   eventTitle: {
     fontSize: 24,
     fontWeight: 'bold',
-    color: COLORS.text,
     marginBottom: 8,
   },
   disasterType: {
     fontSize: 16,
-    color: COLORS.textLight,
   },
   sectionTitle: {
     fontSize: 18,
     fontWeight: '600',
-    color: COLORS.text,
     marginBottom: 12,
   },
   sectionHeader: {
@@ -186,7 +172,6 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   riskContainer: {
-    backgroundColor: COLORS.card,
     borderRadius: 12,
     padding: 16,
   },
@@ -199,10 +184,9 @@ const styles = StyleSheet.create({
   riskText: {
     fontSize: 16,
     fontWeight: 'bold',
-    color: COLORS.text,
   },
   recommendationCard: {
-    backgroundColor: '#fff3cd',
+    backgroundColor: '#fff3cd', // Light yellow background
     borderLeftWidth: 4,
     borderLeftColor: '#ff4444',
     padding: 16,
@@ -210,11 +194,10 @@ const styles = StyleSheet.create({
   },
   recommendationText: {
     fontSize: 16,
-    color: '#856404',
+    color: '#856404', // Dark brownish text ensures readability on yellow
     lineHeight: 24,
   },
   actionButton: {
-    backgroundColor: COLORS.primary,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -224,21 +207,14 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   actionButtonText: {
-    color: COLORS.white,
     fontSize: 16,
     fontWeight: '600',
   },
   secondaryButton: {
-    backgroundColor: COLORS.white,
     borderWidth: 2,
-    borderColor: COLORS.primary,
-  },
-  secondaryButtonText: {
-    color: COLORS.primary,
   },
   infoText: {
     fontSize: 14,
-    color: COLORS.textLight,
     marginBottom: 4,
   },
 });
