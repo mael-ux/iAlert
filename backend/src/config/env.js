@@ -6,6 +6,7 @@ export const ENV = {
   DATABASE_URL: process.env.DATABASE_URL,
   NODE_ENV: process.env.NODE_ENV || "development",
   OPENWEATHER_API_KEY: process.env.OPENWEATHER_API_KEY,
+  CLERK_WEBHOOK_SECRET: process.env.CLERK_WEBHOOK_SECRET,  // ← ADD THIS
   // Smart API_URL: uses env var in production, localhost in dev
   API_URL: process.env.NODE_ENV === "production"
     ? process.env.API_URL || "https://ialert.onrender.com/api"
@@ -19,6 +20,10 @@ if (!ENV.DATABASE_URL) {
 
 if (!ENV.OPENWEATHER_API_KEY) {
   console.warn("⚠️  WARNING: OPENWEATHER_API_KEY is not set");
+}
+
+if (!ENV.CLERK_WEBHOOK_SECRET) {  // ← ADD THIS
+  console.warn("⚠️  WARNING: CLERK_WEBHOOK_SECRET is not set - webhooks will fail");
 }
 
 if (!ENV.API_URL) {
