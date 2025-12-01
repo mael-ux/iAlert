@@ -1,27 +1,16 @@
-// mobile/app/(tabs)/user.jsx
 import React, { useState } from "react";
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Image, Switch } from 'react-native';
 import { useAuth, useUser } from '@clerk/clerk-expo';
 import { Ionicons } from '@expo/vector-icons';
-import { Link } from 'expo-router';
-import { COLORS } from '../../constants/colors';
-
-// Reusable navigation button component
-const SettingsButton = ({ href, title, icon }) => (
-  <Link href={href} asChild>
-    <TouchableOpacity style={styles.button}>
-      <Ionicons name={icon} size={24} color={COLORS.primary} />
-      <Text style={styles.buttonText}>{title}</Text>
-      <Ionicons name="chevron-forward-outline" size={20} color={COLORS.textLight} />
-    </TouchableOpacity>
-  </Link>
-);
+import { useRouter } from 'expo-router'; 
+import { useTheme } from '../ThemeContext';
 
 export default function UserScreen() {
   const { signOut, isSignedIn } = useAuth();
   const { user } = useUser();
+  const { theme } = useTheme();
+  const router = useRouter(); 
   
-  // Estado para el toggle de idioma (Lógica visual por ahora)
   const [isEnglish, setIsEnglish] = useState(false);
 
   const handleSignOut = async () => {
@@ -34,47 +23,67 @@ export default function UserScreen() {
   };
 
   const toggleLanguage = () => {
-    setIsEnglish(previousState => !previousState);
-    // Aquí iría la lógica real para cambiar el contexto de idioma más adelante
+    setIsEnglish(prev => !prev);
   };
 
+  // Helper component for settings buttons
+  const SettingsButton = ({ href, title, icon }) => (
+    <TouchableOpacity 
+      style={[styles.button, { backgroundColor: theme.card, borderColor: theme.border }]}
+      onPress={() => router.push(href)}
+      activeOpacity={0.7}
+    >
+      <View style={styles.buttonContent}>
+        <Ionicons name={icon} size={24} color={theme.primary} />
+        <Text style={[styles.buttonText, { color: theme.text }]}>{title}</Text>
+        <Ionicons name="chevron-forward-outline" size={20} color={theme.textLight || '#ccc'} />
+      </View>
+    </TouchableOpacity>
+  );
+
   return (
-    <View style={styles.container}>
-      <ScrollView contentContainerStyle={styles.scrollContent}>
+    <View style={[styles.container, { backgroundColor: theme.background }]}>
+      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         
-        {/* 1. SECCIÓN DE USUARIO (MovidA AL PRINCIPIO) */}
+        {/* 1. SECCIÓN DE USUARIO */}
         <View style={styles.headerSection}>
-          <Link href="/editusuario" asChild>
-            <TouchableOpacity style={styles.profileCard}>
-              <View style={styles.profileInfo}>
-                {/* Lógica para mostrar FOTO REAL o ICONO por defecto */}
-                {user?.imageUrl ? (
-                  <Image 
-                    source={{ uri: user.imageUrl }} 
-                    style={styles.realProfileImage} 
-                  />
-                ) : (
-                  <Ionicons name="person-circle-outline" size={60} color={COLORS.primary} />
-                )}
-                
-                <View style={styles.profileDetails}>
-                  <Text style={styles.profileName}>
-                    {user?.firstName ? `${user.firstName} ${user.lastName || ''}` : 'Usuario'}
-                  </Text>
-                  <Text style={styles.profileEmail}>
-                    {user?.primaryEmailAddress?.emailAddress || 'No email'}
-                  </Text>
-                  <Text style={styles.editProfileText}>Editar perfil</Text>
-                </View>
-                <Ionicons name="chevron-forward-outline" size={20} color={COLORS.textLight} />
+          <TouchableOpacity 
+            style={[styles.profileCard, { backgroundColor: theme.card, borderColor: theme.border }]}
+            onPress={() => router.push('/editusuario')}
+            activeOpacity={0.8}
+          >
+            <View style={styles.profileInfo}>
+              {user?.imageUrl ? (
+                <Image 
+                  source={{ uri: user.imageUrl }} 
+                  style={[styles.realProfileImage, { borderColor: theme.primary }]} 
+                />
+              ) : (
+                <Ionicons name="person-circle-outline" size={60} color={theme.primary} />
+              )}
+              
+              <View style={styles.profileDetails}>
+                <Text style={[styles.profileName, { color: theme.text }]}>
+                  {user?.firstName ? `${user.firstName} ${user.lastName || ''}` : (isEnglish ? 'User' : 'Usuario')}
+                </Text>
+                <Text style={[styles.profileEmail, { color: theme.textLight }]}>
+                  {user?.primaryEmailAddress?.emailAddress || (isEnglish ? 'No email' : 'Sin correo')}
+                </Text>
+                <Text style={[styles.editProfileText, { color: theme.primary }]}>
+                  {isEnglish ? 'Edit Profile' : 'Editar perfil'}
+                </Text>
               </View>
-            </TouchableOpacity>
-          </Link>
+              
+              <Ionicons name="chevron-forward-outline" size={20} color={theme.textLight || '#ccc'} />
+            </View>
+          </TouchableOpacity>
         </View>
 
         {/* 2. App Settings Section */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>{isEnglish ? 'App Settings' : 'Configuración'}</Text>
+          <Text style={[styles.sectionTitle, { color: theme.textLight }]}>
+            {isEnglish ? 'App Settings' : 'Configuración'}
+          </Text>
           
           <SettingsButton
             href="/zones"
@@ -89,15 +98,15 @@ export default function UserScreen() {
           />
           
           {/* TOGGLE DE IDIOMA */}
-          <View style={styles.toggleRow}>
-            <View style={styles.toggleRowLeft}>
-              <Ionicons name="language-outline" size={24} color={COLORS.primary} />
-              <Text style={styles.buttonText}>
+          <View style={[styles.toggleRow, { backgroundColor: theme.card, borderColor: theme.border }]}>
+            <View style={styles.buttonContent}>
+              <Ionicons name="language-outline" size={24} color={theme.primary} />
+              <Text style={[styles.buttonText, { color: theme.text }]}>
                 {isEnglish ? "Language: English" : "Idioma: Español"}
               </Text>
             </View>
             <Switch
-              trackColor={{ false: "#767577", true: COLORS.primary }}
+              trackColor={{ false: "#767577", true: theme.primary }}
               thumbColor={isEnglish ? "#f4f3f4" : "#f4f3f4"}
               ios_backgroundColor="#3e3e3e"
               onValueChange={toggleLanguage}
@@ -114,36 +123,40 @@ export default function UserScreen() {
 
         {/* 3. NASA & Support Section */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>{isEnglish ? 'More' : 'Más'}</Text>
+          <Text style={[styles.sectionTitle, { color: theme.textLight }]}>
+            {isEnglish ? 'More' : 'Más'}
+          </Text>
           
           <SettingsButton
             href="/Nasa"
-            title="Galería NASA"
+            title={isEnglish ? "NASA Gallery" : "Galería NASA"}
             icon="planet-outline"
           />
           
           <SettingsButton
             href="/dudas"
-            title="Preguntas Frecuentes (FAQ)"
+            title={isEnglish ? "FAQ" : "Preguntas Frecuentes (FAQ)"}
             icon="help-circle-outline"
           />
           
           <SettingsButton
             href="/soporte"
-            title="Soporte"
+            title={isEnglish ? "Support" : "Soporte"}
             icon="mail-outline"
           />
         </View>
 
         {/* Sign Out Button */}
         <TouchableOpacity
-          style={[styles.button, styles.signOutButton]}
+          style={[styles.button, styles.signOutButton, { backgroundColor: theme.card, borderColor: theme.primary }]}
           onPress={handleSignOut}
         >
-          <Ionicons name="log-out-outline" size={24} color={COLORS.primary} />
-          <Text style={[styles.buttonText, styles.signOutText]}>
-            {isEnglish ? "Sign Out" : "Cerrar Sesión"}
-          </Text>
+          <View style={[styles.buttonContent, { justifyContent: 'center' }]}>
+            <Ionicons name="log-out-outline" size={24} color={theme.primary} />
+            <Text style={[styles.buttonText, styles.signOutText, { color: theme.primary, flex: 0, marginLeft: 8 }]}>
+              {isEnglish ? "Sign Out" : "Cerrar Sesión"}
+            </Text>
+          </View>
         </TouchableOpacity>
         
         {/* Espacio extra al final */}
@@ -156,10 +169,9 @@ export default function UserScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: COLORS.background,
   },
   scrollContent: {
-    paddingTop: 60, // Espacio para el header seguro
+    paddingTop: 60,
     paddingHorizontal: 16,
   },
   section: {
@@ -171,31 +183,32 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 14,
     fontWeight: '700',
-    color: COLORS.textLight,
     textTransform: 'uppercase',
     marginBottom: 10,
     marginLeft: 4,
     letterSpacing: 1,
   },
+  // Button container style
   button: {
-    backgroundColor: COLORS.card,
     padding: 16,
-    borderRadius: 16, // Bordes más redondeados
-    flexDirection: 'row',
-    alignItems: 'center',
+    borderRadius: 16,
     marginBottom: 10,
     borderWidth: 1,
-    borderColor: 'rgba(0,0,0,0.05)', // Borde muy sutil
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.05,
     shadowRadius: 3,
     elevation: 2,
+    width: '100%',
   },
-  // Estilo específico para la fila del toggle
+  // Inner content to enforce row layout
+  buttonContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1, // Allows space for sibling elements (like Switch)
+  },
   toggleRow: {
-    backgroundColor: COLORS.card,
-    padding: 12, // Un poco menos de padding vertical para el switch
+    padding: 12,
     paddingHorizontal: 16,
     borderRadius: 16,
     flexDirection: 'row',
@@ -203,41 +216,30 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     marginBottom: 10,
     borderWidth: 1,
-    borderColor: 'rgba(0,0,0,0.05)',
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.05,
     shadowRadius: 3,
     elevation: 2,
-  },
-  toggleRowLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    width: '100%',
   },
   buttonText: {
-    color: COLORS.text,
     fontSize: 16,
     marginLeft: 16,
     fontWeight: '500',
+    flex: 1, // Pushes the arrow/content to the far right
   },
   signOutButton: {
-    backgroundColor: COLORS.card,
-    borderColor: COLORS.primary,
     marginTop: 10,
-    justifyContent: 'center',
   },
   signOutText: {
-    color: COLORS.primary,
     fontWeight: '700',
     textAlign: 'center',
-    marginLeft: 8, // Ajuste pequeño
   },
   profileCard: {
-    backgroundColor: COLORS.card,
     padding: 20,
     borderRadius: 20,
     borderWidth: 1,
-    borderColor: 'rgba(0,0,0,0.05)',
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.1,
@@ -245,34 +247,29 @@ const styles = StyleSheet.create({
     elevation: 4,
   },
   profileInfo: {
-    flexDirection: 'row',
+    flexDirection: 'row', // Ensures horizontal layout for profile
     alignItems: 'center',
   },
-  // Estilo para la imagen real
   realProfileImage: {
     width: 60,
     height: 60,
-    borderRadius: 30, // Circular
+    borderRadius: 30,
     borderWidth: 2,
-    borderColor: COLORS.primary,
   },
   profileDetails: {
     marginLeft: 16,
     flex: 1,
   },
   profileName: {
-    color: COLORS.text,
     fontSize: 20,
     fontWeight: '700',
     marginBottom: 2,
   },
   profileEmail: {
-    color: COLORS.textLight,
     fontSize: 14,
     marginBottom: 4,
   },
   editProfileText: {
-    color: COLORS.primary,
     fontSize: 12,
     fontWeight: '600',
   },

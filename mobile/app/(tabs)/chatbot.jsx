@@ -1,3 +1,4 @@
+// mobile/app/chatbot.jsx
 import React, { useState, useRef, useEffect } from "react";
 import {
   View,
@@ -8,10 +9,12 @@ import {
   ActivityIndicator,
 } from "react-native";
 import SafeAreaWrapper from "../components/safeAreaWrapper";
-import { COLORS } from "../../constants/colors";
 import { AI_API_URL } from "../../constants/api";
+import { useTheme } from "../ThemeContext"; // Import theme context
 
 export default function ChatBot() {
+  const { theme } = useTheme(); // Use the theme hook
+  
   const [messages, setMessages] = useState([
     { from: "bot", text: "👋 Hola, selecciona un continente para comenzar:" },
   ]);
@@ -152,18 +155,23 @@ export default function ChatBot() {
   };
 
   return (
-    <SafeAreaWrapper style={styles.container}>
+    <SafeAreaWrapper style={[styles.container, { backgroundColor: theme.background }]}>
       <ScrollView ref={scrollRef} style={styles.chat}>
         {messages.map((msg, index) => (
           <View
             key={index}
             style={[
               styles.bubble,
-              msg.from === "user" ? styles.userBubble : styles.botBubble,
+              msg.from === "user" 
+                ? [styles.userBubble, { backgroundColor: theme.primary + '20' }] // Transparent Primary
+                : [styles.botBubble, { backgroundColor: theme.card }],           // Theme Card Color
             ]}
           >
             <Text
-              style={msg.from === "user" ? styles.userText : styles.botText}
+              style={[
+                msg.from === "user" ? styles.userText : styles.botText,
+                { color: theme.text } // Dynamic Text Color
+              ]}
             >
               {msg.text}
             </Text>
@@ -173,7 +181,7 @@ export default function ChatBot() {
         {/* Loading indicator */}
         {isLoading && (
           <View style={styles.loadingContainer}>
-            <ActivityIndicator size="small" color={COLORS.primary} />
+            <ActivityIndicator size="small" color={theme.primary} />
           </View>
         )}
 
@@ -183,10 +191,10 @@ export default function ChatBot() {
             {continentes.map((c, i) => (
               <TouchableOpacity
                 key={i}
-                style={styles.contBtn}
+                style={[styles.contBtn, { backgroundColor: theme.primary }]}
                 onPress={() => elegirContinente(c)}
               >
-                <Text style={styles.contBtnText}>{c}</Text>
+                <Text style={[styles.contBtnText, { color: theme.white }]}>{c}</Text>
               </TouchableOpacity>
             ))}
           </View>
@@ -203,10 +211,10 @@ export default function ChatBot() {
               {countries.map((p, i) => (
                 <TouchableOpacity
                   key={i}
-                  style={styles.countryBtn}
+                  style={[styles.countryBtn, { backgroundColor: theme.primary }]}
                   onPress={() => elegirPais(p)}
                 >
-                  <Text style={styles.countryBtnText}>{p}</Text>
+                  <Text style={[styles.countryBtnText, { color: theme.white }]}>{p}</Text>
                 </TouchableOpacity>
               ))}
             </ScrollView>
@@ -223,7 +231,6 @@ export default function ChatBot() {
 const styles = StyleSheet.create({
   container: { 
     flex: 1, 
-    backgroundColor: COLORS.background  // Use app background
   },
 
   chat: { 
@@ -244,25 +251,21 @@ const styles = StyleSheet.create({
   },
 
   botBubble: {
-    backgroundColor: COLORS.card,  // Use app card color
     alignSelf: "flex-start",
     borderBottomLeftRadius: 0,
   },
 
   userBubble: {
-    backgroundColor: COLORS.primary + '20',  // Primary color with transparency
     alignSelf: "flex-end",
     borderBottomRightRadius: 0,
   },
 
   botText: { 
-    color: COLORS.text,  // Use app text color
     fontSize: 15,
     lineHeight: 20,
   },
   
   userText: { 
-    color: COLORS.text,  // Use app text color
     fontSize: 15 
   },
 
@@ -277,7 +280,6 @@ const styles = StyleSheet.create({
   },
 
   contBtn: {
-    backgroundColor: COLORS.primary,  // Use app primary color (red)
     paddingVertical: 12,
     paddingHorizontal: 20,
     borderRadius: 20,
@@ -291,7 +293,6 @@ const styles = StyleSheet.create({
   },
 
   contBtnText: {
-    color: COLORS.white,  // Use white for contrast
     fontWeight: "bold",
     fontSize: 15,
   },
@@ -301,7 +302,6 @@ const styles = StyleSheet.create({
   },
 
   countryBtn: {
-    backgroundColor: COLORS.primary,  // Use app primary color (red)
     paddingVertical: 10,
     paddingHorizontal: 16,
     borderRadius: 20,
@@ -314,7 +314,6 @@ const styles = StyleSheet.create({
   },
 
   countryBtnText: {
-    color: COLORS.white,  // Use white for contrast
     fontWeight: "bold",
     fontSize: 14,
   },

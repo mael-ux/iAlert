@@ -1,20 +1,12 @@
+// mobile/app/(tabs)/globe.jsx
 import React from "react";
-import { View, Text, StyleSheet } from "react-native";
-import { COLORS } from "../../constants/colors";
-
+import { View, StyleSheet } from "react-native";
 import GlobeMap from "../components/globeMap";
 
 export default function GlobeScreen() {
   return (
-    
     <View style={styles.container}>
-      {/* You can add a title here if you want */}
-      {/* <Text style={styles.title}>Globe</Text> */}
-
-      {/* 3. FIX: Container for the map */}
-      <View style={{ height: 400, width: "100%", marginTop: 20 }}>
-        <GlobeMap style={{ flex: 1 }} /> 
-      </View>
+      <GlobeMap style={styles.globe} /> 
     </View>
   );
 }
@@ -22,17 +14,9 @@ export default function GlobeScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    alignItems: "center",
-    padding: 24,
-    backgroundColor: '#000', 
+    backgroundColor: '#000',
   },
-  title: {
-    fontSize: 24,
-    fontWeight: "bold",
-    color: '#fff', 
-  },
-  subtitle: {
-    fontSize: 16,
-    color: '#999', 
+  globe: {
+    flex: 1,
   },
 });

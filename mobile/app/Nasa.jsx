@@ -1,5 +1,4 @@
 // mobile/app/nasa.jsx
-// NASA Photo Gallery - Accessible from user tab
 import React, { useState, useEffect } from 'react';
 import { 
   View, 
@@ -17,14 +16,15 @@ import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import SafeAreaWrapper from './components/safeAreaWrapper';
 import CustomHeader from './components/customHeader';
-import { COLORS } from '../constants/colors';
 import { API_URL } from '../constants/api';
+import { useTheme } from './ThemeContext'; // Import context
 
 const { width } = Dimensions.get('window');
 const CARD_WIDTH = (width - 48) / 2; // 2 columns with padding
 
 export default function NASAGalleryScreen() {
   const router = useRouter();
+  const { theme } = useTheme(); // Use the hook
   const [photos, setPhotos] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedPhoto, setSelectedPhoto] = useState(null);
@@ -64,7 +64,7 @@ export default function NASAGalleryScreen() {
 
   const renderPhotoCard = ({ item }) => (
     <TouchableOpacity 
-      style={styles.card}
+      style={[styles.card, { backgroundColor: theme.card }]} // Dynamic card color
       onPress={() => openPhoto(item)}
       activeOpacity={0.8}
     >
@@ -74,6 +74,7 @@ export default function NASAGalleryScreen() {
         resizeMode="cover"
       />
       <View style={styles.cardOverlay}>
+        {/* Title stays white because it is on a dark overlay */}
         <Text style={styles.cardTitle} numberOfLines={2}>
           {item.title}
         </Text>
@@ -83,18 +84,18 @@ export default function NASAGalleryScreen() {
 
   if (loading) {
     return (
-      <SafeAreaWrapper style={styles.container}>
+      <SafeAreaWrapper style={[styles.container, { backgroundColor: theme.background }]}>
         <CustomHeader title="NASA Gallery" backTo="/(tabs)/user" />
         <View style={styles.centerContent}>
-          <ActivityIndicator size="large" color={COLORS.primary} />
-          <Text style={styles.loadingText}>Loading gallery...</Text>
+          <ActivityIndicator size="large" color={theme.primary} />
+          <Text style={[styles.loadingText, { color: theme.textLight }]}>Loading gallery...</Text>
         </View>
       </SafeAreaWrapper>
     );
   }
 
   return (
-    <SafeAreaWrapper style={styles.container}>
+    <SafeAreaWrapper style={[styles.container, { backgroundColor: theme.background }]}>
       <CustomHeader title="NASA Gallery" backTo="/(tabs)/user" />
       
       <FlatList
@@ -115,10 +116,11 @@ export default function NASAGalleryScreen() {
         onRequestClose={closePhoto}
       >
         {selectedPhoto && (
-          <SafeAreaWrapper style={styles.modalContainer}>
+          // Modal background adapts to theme
+          <SafeAreaWrapper style={[styles.modalContainer, { backgroundColor: theme.background }]}>
             <View style={styles.modalHeader}>
-              <TouchableOpacity onPress={closePhoto} style={styles.closeButton}>
-                <Ionicons name="close" size={32} color={COLORS.white} />
+              <TouchableOpacity onPress={closePhoto} style={[styles.closeButton, { backgroundColor: theme.card }]}>
+                <Ionicons name="close" size={32} color={theme.text} />
               </TouchableOpacity>
             </View>
 
@@ -133,10 +135,12 @@ export default function NASAGalleryScreen() {
               />
               
               <View style={styles.photoInfo}>
-                <Text style={styles.modalTitle}>{selectedPhoto.title}</Text>
+                <Text style={[styles.modalTitle, { color: theme.text }]}>
+                  {selectedPhoto.title}
+                </Text>
                 
                 {selectedPhoto.date && (
-                  <Text style={styles.photoDate}>
+                  <Text style={[styles.photoDate, { color: theme.textLight }]}>
                     📅 {new Date(selectedPhoto.date).toLocaleDateString('en-US', {
                       year: 'numeric',
                       month: 'long',
@@ -146,15 +150,15 @@ export default function NASAGalleryScreen() {
                 )}
                 
                 {selectedPhoto.description && (
-                  <Text style={styles.photoDescription}>
+                  <Text style={[styles.photoDescription, { color: theme.text }]}>
                     {selectedPhoto.description}
                   </Text>
                 )}
                 
                 {selectedPhoto.credits && (
-                  <View style={styles.creditsContainer}>
-                    <Text style={styles.creditsLabel}>Credits:</Text>
-                    <Text style={styles.creditsText}>{selectedPhoto.credits}</Text>
+                  <View style={[styles.creditsContainer, { backgroundColor: theme.card }]}>
+                    <Text style={[styles.creditsLabel, { color: theme.textLight }]}>Credits:</Text>
+                    <Text style={[styles.creditsText, { color: theme.text }]}>{selectedPhoto.credits}</Text>
                   </View>
                 )}
               </View>
@@ -169,7 +173,6 @@ export default function NASAGalleryScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: COLORS.background,
   },
   centerContent: {
     flex: 1,
@@ -179,7 +182,6 @@ const styles = StyleSheet.create({
   loadingText: {
     marginTop: 16,
     fontSize: 16,
-    color: COLORS.textLight,
   },
   grid: {
     padding: 16,
@@ -193,7 +195,6 @@ const styles = StyleSheet.create({
     marginBottom: 16,
     borderRadius: 12,
     overflow: 'hidden',
-    backgroundColor: COLORS.card,
     elevation: 4,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
@@ -213,7 +214,7 @@ const styles = StyleSheet.create({
     padding: 12,
   },
   cardTitle: {
-    color: COLORS.white,
+    color: '#FFFFFF', // Keep white for contrast on overlay
     fontSize: 14,
     fontWeight: '600',
     lineHeight: 18,
@@ -222,23 +223,23 @@ const styles = StyleSheet.create({
   // Modal styles
   modalContainer: {
     flex: 1,
-    backgroundColor: '#000',
   },
   modalHeader: {
     padding: 16,
     alignItems: 'flex-end',
+    zIndex: 10,
   },
   closeButton: {
     padding: 8,
-    backgroundColor: 'rgba(255,255,255,0.2)',
     borderRadius: 20,
+    elevation: 2,
   },
   modalContent: {
     paddingBottom: 32,
   },
   fullImage: {
     width: width,
-    height: width * 1.2,
+    height: width * 1.2, // Square-ish aspect ratio for better fit
   },
   photoInfo: {
     padding: 20,
@@ -246,31 +247,25 @@ const styles = StyleSheet.create({
   modalTitle: {
     fontSize: 24,
     fontWeight: 'bold',
-    color: COLORS.white,
     marginBottom: 12,
   },
   photoDate: {
     fontSize: 14,
-    color: COLORS.white,
-    opacity: 0.8,
     marginBottom: 16,
+    opacity: 0.8,
   },
   photoDescription: {
     fontSize: 16,
-    color: COLORS.white,
     lineHeight: 24,
     marginBottom: 16,
-    opacity: 0.9,
   },
   creditsContainer: {
-    backgroundColor: 'rgba(255,255,255,0.1)',
     padding: 12,
     borderRadius: 8,
     marginTop: 8,
   },
   creditsLabel: {
     fontSize: 12,
-    color: COLORS.white,
     opacity: 0.7,
     marginBottom: 4,
     textTransform: 'uppercase',
@@ -278,7 +273,6 @@ const styles = StyleSheet.create({
   },
   creditsText: {
     fontSize: 14,
-    color: COLORS.white,
     fontStyle: 'italic',
   },
 });

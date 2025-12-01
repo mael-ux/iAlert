@@ -1,3 +1,4 @@
+// mobile/app/zones.jsx
 import React, { useState, useEffect } from 'react';
 import { 
   View, 
@@ -14,11 +15,13 @@ import { Stack, useRouter } from 'expo-router';
 import { useUser } from '@clerk/clerk-expo';
 import { Ionicons } from '@expo/vector-icons';
 import SafeAreaWrapper from './components/safeAreaWrapper';
-import { COLORS } from '../constants/colors';
 import { API_URL } from '../constants/api';
+import { useTheme } from './ThemeContext'; // Import context
+import CustomHeader from './components/customHeader'; // Import header
 
 export default function ZonesScreen() {
   const { user } = useUser();
+  const { theme } = useTheme(); // Use Theme hook
   const router = useRouter();
 
   const [isLoading, setIsLoading] = useState(false);
@@ -170,82 +173,87 @@ export default function ZonesScreen() {
   // --- UI Components ---
 
   const renderSavedZone = ({ item }) => (
-    <View style={styles.zoneCard}>
+    <View style={[styles.zoneCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
       <View style={styles.zoneInfo}>
-        <Text style={styles.zoneTitle}>{item.title}</Text>
-        <Text style={styles.zoneCoords}>
+        <Text style={[styles.zoneTitle, { color: theme.text }]}>{item.title}</Text>
+        <Text style={[styles.zoneCoords, { color: theme.textLight }]}>
           📍 {parseFloat(item.latitude).toFixed(2)}°, {parseFloat(item.longitude).toFixed(2)}°
         </Text>
       </View>
       <TouchableOpacity onPress={() => handleDeleteZone(item)} style={styles.deleteButton}>
-        <Ionicons name="trash-outline" size={24} color={COLORS.error} />
+        <Ionicons name="trash-outline" size={24} color="#FF3B30" />
       </TouchableOpacity>
     </View>
   );
 
   const renderSearchResult = ({ item }) => (
     <TouchableOpacity 
-      style={styles.resultCard}
+      style={[styles.resultCard, { backgroundColor: theme.card, borderColor: theme.border }]}
       onPress={() => handleAddZone(item)}
     >
       <View>
-        <Text style={styles.resultTitle}>{item.name}, {item.country}</Text>
-        {item.state && <Text style={styles.resultState}>{item.state}</Text>}
+        <Text style={[styles.resultTitle, { color: theme.text }]}>{item.name}, {item.country}</Text>
+        {item.state && <Text style={[styles.resultState, { color: theme.textLight }]}>{item.state}</Text>}
       </View>
-      <Ionicons name="add-circle" size={24} color={COLORS.primary} />
+      <Ionicons name="add-circle" size={24} color={theme.primary} />
     </TouchableOpacity>
   );
 
   if (!user) {
     return (
-      <SafeAreaWrapper style={styles.container}>
+      <SafeAreaWrapper style={[styles.container, { backgroundColor: theme.background }]}>
         <View style={styles.centerContent}>
-          <Text style={styles.errorText}>Please sign in to manage zones</Text>
+          <Text style={[styles.errorText, { color: theme.text }]}>Please sign in to manage zones</Text>
         </View>
       </SafeAreaWrapper>
     );
   }
 
   return (
-    <SafeAreaWrapper style={styles.container}>
+    <SafeAreaWrapper style={[styles.container, { backgroundColor: theme.background }]}>
       <Stack.Screen options={{ headerShown: false }} />
       
       {/* --- Header --- */}
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-          <Ionicons name="arrow-back" size={24} color={COLORS.text} />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Interest Zones</Text>
-        <View style={styles.placeholder} />
-      </View>
+      <CustomHeader title="Interest Zones" backTo="/(tabs)/user" />
 
       {/* --- Search Bar --- */}
       {savedZones.length < MAX_ZONES ? (
         <View style={styles.searchContainer}>
           <TextInput
-            style={styles.searchInput}
+            style={[
+              styles.searchInput, 
+              { 
+                backgroundColor: theme.card, 
+                color: theme.text, 
+                borderColor: theme.border 
+              }
+            ]}
             placeholder="Search for a city..."
-            placeholderTextColor={COLORS.textLight}
+            placeholderTextColor={theme.textLight}
             value={searchQuery}
             onChangeText={setSearchQuery}
             onSubmitEditing={handleSearch}
             returnKeyType="search"
           />
           <TouchableOpacity 
-            style={[styles.searchButton, isSearching && styles.searchButtonDisabled]} 
+            style={[
+              styles.searchButton, 
+              { backgroundColor: theme.primary },
+              isSearching && styles.searchButtonDisabled
+            ]} 
             onPress={handleSearch}
             disabled={isSearching}
           >
             {isSearching ? (
-              <ActivityIndicator size="small" color={COLORS.white} />
+              <ActivityIndicator size="small" color={theme.white} />
             ) : (
-              <Ionicons name="search" size={20} color={COLORS.white} />
+              <Ionicons name="search" size={20} color={theme.white} />
             )}
           </TouchableOpacity>
         </View>
       ) : (
-        <View style={styles.limitContainer}>
-          <Text style={styles.limitText}>
+        <View style={[styles.limitContainer, { backgroundColor: theme.primary + '20' }]}>
+          <Text style={[styles.limitText, { color: theme.primary }]}>
             ✓ You've reached the maximum of {MAX_ZONES} zones
           </Text>
         </View>
@@ -254,7 +262,7 @@ export default function ZonesScreen() {
       {/* --- Search Results --- */}
       {searchResults.length > 0 && (
         <View style={styles.resultsContainer}>
-          <Text style={styles.sectionTitle}>Search Results:</Text>
+          <Text style={[styles.sectionTitle, { color: theme.text }]}>Search Results:</Text>
           <FlatList
             data={searchResults}
             renderItem={renderSearchResult}
@@ -266,19 +274,19 @@ export default function ZonesScreen() {
 
       {/* --- Saved Zones List --- */}
       <View style={styles.zonesContainer}>
-        <Text style={styles.sectionTitle}>
+        <Text style={[styles.sectionTitle, { color: theme.text }]}>
           My Zones ({savedZones.length}/{MAX_ZONES})
         </Text>
         
         {isLoading ? (
           <View style={styles.centerContent}>
-            <ActivityIndicator size="large" color={COLORS.primary} />
+            <ActivityIndicator size="large" color={theme.primary} />
           </View>
         ) : savedZones.length === 0 ? (
           <View style={styles.emptyContainer}>
-            <Ionicons name="location-outline" size={64} color={COLORS.textLight} />
-            <Text style={styles.emptyText}>No zones saved yet</Text>
-            <Text style={styles.emptySubtext}>Search for cities above to add them</Text>
+            <Ionicons name="location-outline" size={64} color={theme.textLight} />
+            <Text style={[styles.emptyText, { color: theme.text }]}>No zones saved yet</Text>
+            <Text style={[styles.emptySubtext, { color: theme.textLight }]}>Search for cities above to add them</Text>
           </View>
         ) : (
           <FlatList
@@ -296,7 +304,6 @@ export default function ZonesScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: COLORS.background,
   },
   centerContent: {
     flex: 1,
@@ -305,28 +312,6 @@ const styles = StyleSheet.create({
   },
   errorText: {
     fontSize: 16,
-    color: COLORS.error,
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.border,
-    backgroundColor: COLORS.card,
-  },
-  backButton: {
-    padding: 8,
-  },
-  placeholder: {
-    width: 40,
-  },
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: COLORS.text,
   },
   searchContainer: {
     flexDirection: 'row',
@@ -335,16 +320,12 @@ const styles = StyleSheet.create({
   },
   searchInput: {
     flex: 1,
-    backgroundColor: COLORS.card,
     borderRadius: 12,
     padding: 14,
     fontSize: 16,
-    color: COLORS.text,
     borderWidth: 1,
-    borderColor: COLORS.border,
   },
   searchButton: {
-    backgroundColor: COLORS.primary,
     width: 50,
     borderRadius: 12,
     justifyContent: 'center',
@@ -356,12 +337,10 @@ const styles = StyleSheet.create({
   limitContainer: {
     margin: 16,
     padding: 16,
-    backgroundColor: COLORS.primary + '20',
     borderRadius: 12,
     alignItems: 'center',
   },
   limitText: {
-    color: COLORS.primary,
     fontSize: 16,
     fontWeight: '600',
   },
@@ -372,30 +351,25 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 16,
     fontWeight: 'bold',
-    color: COLORS.text,
     marginBottom: 12,
   },
   resultsList: {
     maxHeight: 200,
   },
   resultCard: {
-    backgroundColor: COLORS.card,
     padding: 16,
     borderRadius: 12,
     marginBottom: 8,
     borderWidth: 1,
-    borderColor: COLORS.border,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
   },
   resultTitle: {
-    color: COLORS.text,
     fontSize: 16,
     fontWeight: '600',
   },
   resultState: {
-    color: COLORS.textLight,
     fontSize: 14,
     marginTop: 4,
   },
@@ -404,7 +378,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
   },
   zoneCard: {
-    backgroundColor: COLORS.card,
     padding: 16,
     borderRadius: 12,
     flexDirection: 'row',
@@ -412,19 +385,16 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 12,
     borderWidth: 1,
-    borderColor: COLORS.border,
   },
   zoneInfo: {
     flex: 1,
   },
   zoneTitle: {
-    color: COLORS.text,
     fontSize: 16,
     fontWeight: '600',
     marginBottom: 4,
   },
   zoneCoords: {
-    color: COLORS.textLight,
     fontSize: 14,
   },
   deleteButton: {
@@ -439,12 +409,10 @@ const styles = StyleSheet.create({
   emptyText: {
     fontSize: 18,
     fontWeight: '600',
-    color: COLORS.text,
     marginTop: 16,
   },
   emptySubtext: {
     fontSize: 14,
-    color: COLORS.textLight,
     marginTop: 8,
   },
 });

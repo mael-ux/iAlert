@@ -1,5 +1,3 @@
-// mobile/app/(tabs)/weather.jsx
-// Enhanced weather view with detailed information
 import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
@@ -15,13 +13,14 @@ import { useUser } from '@clerk/clerk-expo';
 import * as Location from 'expo-location';
 import { Ionicons } from '@expo/vector-icons';
 import SafeAreaWrapper from '../components/safeAreaWrapper';
-import { COLORS } from '../../constants/colors';
 import { API_URL } from '../../constants/api';
+import { useTheme } from '../ThemeContext'; // Import Theme Context
 
 const { width } = Dimensions.get('window');
 
 export default function WeatherScreen() {
   const { user } = useUser();
+  const { theme } = useTheme(); // Use Theme Hook
   const [currentIndex, setCurrentIndex] = useState(0);
   const [locations, setLocations] = useState([]);
   const [weatherData, setWeatherData] = useState([]);
@@ -151,7 +150,7 @@ export default function WeatherScreen() {
     if (!weather) {
       return (
         <View key={index} style={[styles.card, { width }]}>
-          <Text style={styles.errorText}>Datos no disponibles</Text>
+          <Text style={[styles.errorText, { color: theme.textLight }]}>Datos no disponibles</Text>
         </View>
       );
     }
@@ -180,86 +179,85 @@ export default function WeatherScreen() {
         {/* Header */}
         <View style={styles.cardHeader}>
           <View>
-            <Text style={styles.locationTitle}>{location.title}</Text>
-            <Text style={styles.locationSubtitle}>{location.subtitle}</Text>
+            <Text style={[styles.locationTitle, { color: theme.text }]}>{location.title}</Text>
+            <Text style={[styles.locationSubtitle, { color: theme.textLight }]}>{location.subtitle}</Text>
           </View>
-          {location.id !== 'current' && (
-            <TouchableOpacity onPress={() => deleteZone(location.id)} style={styles.deleteButton}>
-              <Ionicons name="trash-outline" size={20} color={COLORS.error} />
-            </TouchableOpacity>
-          )}
         </View>
 
         {/* Main Temperature */}
         <View style={styles.mainWeather}>
-          <Ionicons name={getWeatherIcon(icon)} size={80} color={COLORS.primary} />
-          <Text style={styles.temperature}>{temp}°C</Text>
-          <Text style={styles.description}>{description}</Text>
-          <Text style={styles.feelsLike}>Sensación térmica: {feelsLike}°C</Text>
+          <Ionicons name={getWeatherIcon(icon)} size={80} color={theme.primary} />
+          <Text style={[styles.temperature, { color: theme.text }]}>{temp}°C</Text>
+          <Text style={[styles.description, { color: theme.textLight }]}>{description}</Text>
+          <Text style={[styles.feelsLike, { color: theme.textLight }]}>Sensación térmica: {feelsLike}°C</Text>
         </View>
 
         {/* Quick Stats Grid */}
         <View style={styles.statsGrid}>
-          <View style={styles.statCard}>
-            <Ionicons name="water-outline" size={24} color={COLORS.primary} />
-            <Text style={styles.statValue}>{humidity}%</Text>
-            <Text style={styles.statLabel}>Humedad</Text>
+          <View style={[styles.statCard, { backgroundColor: theme.card }]}>
+            <Ionicons name="water-outline" size={24} color={theme.primary} />
+            <Text style={[styles.statValue, { color: theme.text }]}>{humidity}%</Text>
+            <Text style={[styles.statLabel, { color: theme.textLight }]}>Humedad</Text>
           </View>
           
-          <View style={styles.statCard}>
-            <Ionicons name="speedometer-outline" size={24} color={COLORS.primary} />
-            <Text style={styles.statValue}>{windSpeed} m/s</Text>
-            <Text style={styles.statLabel}>Viento {getWindDirection(windDeg)}</Text>
+          <View style={[styles.statCard, { backgroundColor: theme.card }]}>
+            <Ionicons name="speedometer-outline" size={24} color={theme.primary} />
+            <Text style={[styles.statValue, { color: theme.text }]}>{windSpeed} m/s</Text>
+            <Text style={[styles.statLabel, { color: theme.textLight }]}>Viento {getWindDirection(windDeg)}</Text>
           </View>
 
-          <View style={styles.statCard}>
-            <Ionicons name="eye-outline" size={24} color={COLORS.primary} />
-            <Text style={styles.statValue}>{visibility} km</Text>
-            <Text style={styles.statLabel}>Visibilidad</Text>
+          <View style={[styles.statCard, { backgroundColor: theme.card }]}>
+            <Ionicons name="eye-outline" size={24} color={theme.primary} />
+            <Text style={[styles.statValue, { color: theme.text }]}>{visibility} km</Text>
+            <Text style={[styles.statLabel, { color: theme.textLight }]}>Visibilidad</Text>
           </View>
 
-          <View style={styles.statCard}>
-            <Ionicons name="cloud-outline" size={24} color={COLORS.primary} />
-            <Text style={styles.statValue}>{clouds}%</Text>
-            <Text style={styles.statLabel}>Nubosidad</Text>
+          <View style={[styles.statCard, { backgroundColor: theme.card }]}>
+            <Ionicons name="cloud-outline" size={24} color={theme.primary} />
+            <Text style={[styles.statValue, { color: theme.text }]}>{clouds}%</Text>
+            <Text style={[styles.statLabel, { color: theme.textLight }]}>Nubosidad</Text>
           </View>
         </View>
 
         {/* Detailed Info */}
-        <View style={styles.detailsSection}>
-          <Text style={styles.sectionTitle}>Información Detallada</Text>
+        <View style={[styles.detailsSection, { backgroundColor: theme.card }]}>
+          <Text style={[styles.sectionTitle, { color: theme.text }]}>Información Detallada</Text>
           
-          <View style={styles.detailRow}>
+          {/* FIXED ICONS HERE */}
+          <View style={[styles.detailRow, { borderBottomColor: theme.border }]}>
             <View style={styles.detailItem}>
-              <Ionicons name="compress-outline" size={20} color={COLORS.textLight} />
-              <Text style={styles.detailLabel}>Presión</Text>
+              {/* Changed from compress-outline to speedometer-outline */}
+              <Ionicons name="speedometer-outline" size={20} color={theme.textLight} />
+              <Text style={[styles.detailLabel, { color: theme.textLight }]}>Presión</Text>
             </View>
-            <Text style={styles.detailValue}>{pressure} hPa</Text>
+            <Text style={[styles.detailValue, { color: theme.text }]}>{pressure} hPa</Text>
           </View>
 
-          <View style={styles.detailRow}>
+          <View style={[styles.detailRow, { borderBottomColor: theme.border }]}>
             <View style={styles.detailItem}>
-              <Ionicons name="sunrise-outline" size={20} color={COLORS.textLight} />
-              <Text style={styles.detailLabel}>Amanecer</Text>
+              {/* Changed from sunrise-outline to sunny-outline */}
+              <Ionicons name="sunny-outline" size={20} color={theme.textLight} />
+              <Text style={[styles.detailLabel, { color: theme.textLight }]}>Amanecer</Text>
             </View>
-            <Text style={styles.detailValue}>{sunrise}</Text>
+            <Text style={[styles.detailValue, { color: theme.text }]}>{sunrise}</Text>
           </View>
 
-          <View style={styles.detailRow}>
+          <View style={[styles.detailRow, { borderBottomColor: theme.border }]}>
             <View style={styles.detailItem}>
-              <Ionicons name="sunset-outline" size={20} color={COLORS.textLight} />
-              <Text style={styles.detailLabel}>Atardecer</Text>
+              {/* Changed from sunset-outline to moon-outline */}
+              <Ionicons name="moon-outline" size={20} color={theme.textLight} />
+              <Text style={[styles.detailLabel, { color: theme.textLight }]}>Atardecer</Text>
             </View>
-            <Text style={styles.detailValue}>{sunset}</Text>
+            <Text style={[styles.detailValue, { color: theme.text }]}>{sunset}</Text>
           </View>
 
           {weather.main?.temp_min && weather.main?.temp_max && (
-            <View style={styles.detailRow}>
+            <View style={[styles.detailRow, { borderBottomColor: 'transparent' }]}>
               <View style={styles.detailItem}>
-                <Ionicons name="thermometer-outline" size={20} color={COLORS.textLight} />
-                <Text style={styles.detailLabel}>Rango</Text>
+                <Ionicons name="thermometer-outline" size={20} color={theme.textLight} />
+                <Text style={[styles.detailLabel, { color: theme.textLight }]}>Rango</Text>
               </View>
-              <Text style={styles.detailValue}>
+              <Text style={[styles.detailValue, { color: theme.text }]}>
                 {Math.round(weather.main.temp_min)}° - {Math.round(weather.main.temp_max)}°
               </Text>
             </View>
@@ -268,7 +266,7 @@ export default function WeatherScreen() {
 
         {/* Coordinates */}
         <View style={styles.coordsSection}>
-          <Text style={styles.coordsText}>
+          <Text style={[styles.coordsText, { color: theme.textLight }]}>
             📍 {location.latitude.toFixed(4)}°, {location.longitude.toFixed(4)}°
           </Text>
         </View>
@@ -276,27 +274,12 @@ export default function WeatherScreen() {
     );
   };
 
-  const deleteZone = async (zoneId) => {
-    // Same delete function from zones screen
-    if (!user) return;
-    try {
-      const response = await fetch(`${API_URL}/interestZone/${user.id}/${zoneId}`, {
-        method: 'DELETE',
-      });
-      if (response.ok) {
-        loadLocations();
-      }
-    } catch (error) {
-      console.error('Error deleting zone:', error);
-    }
-  };
-
   if (loading) {
     return (
-      <SafeAreaWrapper style={styles.container}>
+      <SafeAreaWrapper style={[styles.container, { backgroundColor: theme.background }]}>
         <View style={styles.centerContent}>
-          <ActivityIndicator size="large" color={COLORS.primary} />
-          <Text style={styles.loadingText}>Cargando clima...</Text>
+          <ActivityIndicator size="large" color={theme.primary} />
+          <Text style={[styles.loadingText, { color: theme.textLight }]}>Cargando clima...</Text>
         </View>
       </SafeAreaWrapper>
     );
@@ -304,20 +287,20 @@ export default function WeatherScreen() {
 
   if (locations.length === 0) {
     return (
-      <SafeAreaWrapper style={styles.container}>
+      <SafeAreaWrapper style={[styles.container, { backgroundColor: theme.background }]}>
         <View style={styles.centerContent}>
-          <Ionicons name="location-outline" size={64} color={COLORS.textLight} />
-          <Text style={styles.emptyText}>No hay ubicaciones</Text>
-          <Text style={styles.emptySubtext}>Agrega zonas de interés para ver el clima</Text>
+          <Ionicons name="location-outline" size={64} color={theme.textLight} />
+          <Text style={[styles.emptyText, { color: theme.text }]}>No hay ubicaciones</Text>
+          <Text style={[styles.emptySubtext, { color: theme.textLight }]}>Agrega zonas de interés para ver el clima</Text>
         </View>
       </SafeAreaWrapper>
     );
   }
 
   return (
-    <SafeAreaWrapper style={styles.container}>
+    <SafeAreaWrapper style={[styles.container, { backgroundColor: theme.background }]}>
       {/* Location tabs */}
-      <View style={styles.tabBar}>
+      <View style={[styles.tabBar, { backgroundColor: theme.card, borderBottomColor: theme.border }]}>
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
@@ -326,10 +309,18 @@ export default function WeatherScreen() {
           {locations.map((loc, index) => (
             <TouchableOpacity
               key={index}
-              style={[styles.tab, currentIndex === index && styles.activeTab]}
+              style={[
+                styles.tab, 
+                { backgroundColor: theme.background },
+                currentIndex === index && { backgroundColor: theme.primary }
+              ]}
               onPress={() => navigateToLocation(index)}
             >
-              <Text style={[styles.tabText, currentIndex === index && styles.activeTabText]}>
+              <Text style={[
+                styles.tabText, 
+                { color: theme.textLight },
+                currentIndex === index && styles.activeTabText
+              ]}>
                 {loc.id === 'current' ? '📍' : loc.title.split(',')[0]}
               </Text>
             </TouchableOpacity>
@@ -352,7 +343,14 @@ export default function WeatherScreen() {
       {/* Page indicator */}
       <View style={styles.pageIndicator}>
         {locations.map((_, index) => (
-          <View key={index} style={[styles.dot, currentIndex === index && styles.activeDot]} />
+          <View 
+            key={index} 
+            style={[
+              styles.dot, 
+              { backgroundColor: theme.border },
+              currentIndex === index && { backgroundColor: theme.primary, width: 24 }
+            ]} 
+          />
         ))}
       </View>
     </SafeAreaWrapper>
@@ -362,7 +360,6 @@ export default function WeatherScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: COLORS.background,
   },
   centerContent: {
     flex: 1,
@@ -373,24 +370,19 @@ const styles = StyleSheet.create({
   loadingText: {
     marginTop: 16,
     fontSize: 16,
-    color: COLORS.textLight,
   },
   emptyText: {
     fontSize: 18,
     fontWeight: '600',
-    color: COLORS.text,
     marginTop: 16,
   },
   emptySubtext: {
     fontSize: 14,
-    color: COLORS.textLight,
     marginTop: 8,
     textAlign: 'center',
   },
   tabBar: {
-    backgroundColor: COLORS.card,
     borderBottomWidth: 1,
-    borderBottomColor: COLORS.border,
   },
   tabContent: {
     paddingHorizontal: 16,
@@ -401,18 +393,13 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     marginRight: 8,
     borderRadius: 20,
-    backgroundColor: COLORS.background,
-  },
-  activeTab: {
-    backgroundColor: COLORS.primary,
   },
   tabText: {
     fontSize: 14,
     fontWeight: '600',
-    color: COLORS.textLight,
   },
   activeTabText: {
-    color: COLORS.white,
+    color: '#FFFFFF',
   },
   card: {
     padding: 20,
@@ -426,15 +413,10 @@ const styles = StyleSheet.create({
   locationTitle: {
     fontSize: 24,
     fontWeight: 'bold',
-    color: COLORS.text,
   },
   locationSubtitle: {
     fontSize: 14,
-    color: COLORS.textLight,
     marginTop: 4,
-  },
-  deleteButton: {
-    padding: 8,
   },
   mainWeather: {
     alignItems: 'center',
@@ -443,18 +425,15 @@ const styles = StyleSheet.create({
   temperature: {
     fontSize: 64,
     fontWeight: 'bold',
-    color: COLORS.text,
     marginTop: 16,
   },
   description: {
     fontSize: 18,
-    color: COLORS.textLight,
     textTransform: 'capitalize',
     marginTop: 8,
   },
   feelsLike: {
     fontSize: 14,
-    color: COLORS.textLight,
     marginTop: 4,
   },
   statsGrid: {
@@ -466,7 +445,6 @@ const styles = StyleSheet.create({
   statCard: {
     flex: 1,
     minWidth: '45%',
-    backgroundColor: COLORS.card,
     padding: 16,
     borderRadius: 12,
     alignItems: 'center',
@@ -474,17 +452,14 @@ const styles = StyleSheet.create({
   statValue: {
     fontSize: 20,
     fontWeight: 'bold',
-    color: COLORS.text,
     marginTop: 8,
   },
   statLabel: {
     fontSize: 12,
-    color: COLORS.textLight,
     marginTop: 4,
     textAlign: 'center',
   },
   detailsSection: {
-    backgroundColor: COLORS.card,
     borderRadius: 12,
     padding: 16,
     marginBottom: 16,
@@ -492,7 +467,6 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 16,
     fontWeight: 'bold',
-    color: COLORS.text,
     marginBottom: 16,
   },
   detailRow: {
@@ -501,7 +475,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: COLORS.border,
   },
   detailItem: {
     flexDirection: 'row',
@@ -510,12 +483,10 @@ const styles = StyleSheet.create({
   },
   detailLabel: {
     fontSize: 14,
-    color: COLORS.textLight,
   },
   detailValue: {
     fontSize: 14,
     fontWeight: '600',
-    color: COLORS.text,
   },
   coordsSection: {
     alignItems: 'center',
@@ -523,11 +494,9 @@ const styles = StyleSheet.create({
   },
   coordsText: {
     fontSize: 12,
-    color: COLORS.textLight,
   },
   errorText: {
     fontSize: 16,
-    color: COLORS.error,
     textAlign: 'center',
   },
   pageIndicator: {
@@ -541,10 +510,5 @@ const styles = StyleSheet.create({
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: COLORS.border,
-  },
-  activeDot: {
-    backgroundColor: COLORS.primary,
-    width: 24,
   },
 });

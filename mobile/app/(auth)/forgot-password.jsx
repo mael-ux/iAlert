@@ -1,4 +1,3 @@
-// app/(auth)/forgot-password.jsx
 import { useState } from 'react';
 import {
   View,
@@ -16,10 +15,13 @@ import { authStyles } from '../../assets/styles/auth.styles';
 import { Image } from 'expo-image';
 import { COLORS } from '../../constants/colors';
 import { Ionicons } from '@expo/vector-icons';
+import { useTheme } from '../ThemeContext'; // Import Theme Context
+import SafeAreaWrapper from '../components/safeAreaWrapper'; // Import SafeAreaWrapper
 
 export default function ForgotPassword() {
   const { signIn, setActive, isLoaded } = useSignIn();
   const router = useRouter();
+  const { theme } = useTheme(); // Use Theme Hook
   
   const [email, setEmail] = useState('');
   const [code, setCode] = useState('');
@@ -87,7 +89,7 @@ export default function ForgotPassword() {
   };
 
   return (
-    <View style={authStyles.container}>
+    <SafeAreaWrapper style={[authStyles.container, { backgroundColor: theme.background }]}>
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={authStyles.keyboardView}
@@ -107,22 +109,29 @@ export default function ForgotPassword() {
             />
           </View>
 
-          <Text style={authStyles.title}>
+          <Text style={[authStyles.title, { color: theme.text }]}>
             {step === 1 ? 'Reset Password' : 'Enter New Password'}
           </Text>
           
           {step === 1 ? (
             <>
-              <Text style={authStyles.subtitle}>
+              <Text style={[authStyles.subtitle, { color: theme.textLight }]}>
                 Enter your email address and we'll send you a reset code
               </Text>
               
               <View style={authStyles.formContainer}>
                 <View style={authStyles.inputContainer}>
                   <TextInput
-                    style={authStyles.textInput}
+                    style={[
+                      authStyles.textInput, 
+                      { 
+                        backgroundColor: theme.card, 
+                        color: theme.text, 
+                        borderColor: theme.border 
+                      }
+                    ]}
                     placeholder="Enter email"
-                    placeholderTextColor={COLORS.textLight}
+                    placeholderTextColor={theme.textLight}
                     value={email}
                     onChangeText={setEmail}
                     keyboardType="email-address"
@@ -131,12 +140,16 @@ export default function ForgotPassword() {
                 </View>
 
                 <TouchableOpacity
-                  style={[authStyles.authButton, loading && authStyles.buttonDisabled]}
+                  style={[
+                    authStyles.authButton, 
+                    { backgroundColor: theme.primary },
+                    loading && authStyles.buttonDisabled
+                  ]}
                   onPress={handleSendCode}
                   disabled={loading}
                   activeOpacity={0.8}
                 >
-                  <Text style={authStyles.buttonText}>
+                  <Text style={[authStyles.buttonText, { color: theme.white }]}>
                     {loading ? 'Sending...' : 'Send Reset Code'}
                   </Text>
                 </TouchableOpacity>
@@ -144,16 +157,23 @@ export default function ForgotPassword() {
             </>
           ) : (
             <>
-              <Text style={authStyles.subtitle}>
+              <Text style={[authStyles.subtitle, { color: theme.textLight }]}>
                 Enter the code sent to {email}
               </Text>
               
               <View style={authStyles.formContainer}>
                 <View style={authStyles.inputContainer}>
                   <TextInput
-                    style={authStyles.textInput}
+                    style={[
+                      authStyles.textInput, 
+                      { 
+                        backgroundColor: theme.card, 
+                        color: theme.text, 
+                        borderColor: theme.border 
+                      }
+                    ]}
                     placeholder="Verification code"
-                    placeholderTextColor={COLORS.textLight}
+                    placeholderTextColor={theme.textLight}
                     value={code}
                     onChangeText={setCode}
                     keyboardType="number-pad"
@@ -162,9 +182,16 @@ export default function ForgotPassword() {
 
                 <View style={authStyles.inputContainer}>
                   <TextInput
-                    style={authStyles.textInput}
+                    style={[
+                      authStyles.textInput, 
+                      { 
+                        backgroundColor: theme.card, 
+                        color: theme.text, 
+                        borderColor: theme.border 
+                      }
+                    ]}
                     placeholder="New password"
-                    placeholderTextColor={COLORS.textLight}
+                    placeholderTextColor={theme.textLight}
                     value={newPassword}
                     onChangeText={setNewPassword}
                     secureTextEntry={!showPassword}
@@ -177,18 +204,22 @@ export default function ForgotPassword() {
                     <Ionicons
                       name={showPassword ? 'eye-outline' : 'eye-off-outline'}
                       size={20}
-                      color={COLORS.textLight}
+                      color={theme.textLight}
                     />
                   </TouchableOpacity>
                 </View>
 
                 <TouchableOpacity
-                  style={[authStyles.authButton, loading && authStyles.buttonDisabled]}
+                  style={[
+                    authStyles.authButton, 
+                    { backgroundColor: theme.primary },
+                    loading && authStyles.buttonDisabled
+                  ]}
                   onPress={handleResetPassword}
                   disabled={loading}
                   activeOpacity={0.8}
                 >
-                  <Text style={authStyles.buttonText}>
+                  <Text style={[authStyles.buttonText, { color: theme.white }]}>
                     {loading ? 'Resetting...' : 'Reset Password'}
                   </Text>
                 </TouchableOpacity>
@@ -200,12 +231,12 @@ export default function ForgotPassword() {
             style={authStyles.linkContainer} 
             onPress={() => router.back()}
           >
-            <Text style={authStyles.linkText}>
-              <Text style={authStyles.link}>Back to Sign In</Text>
+            <Text style={[authStyles.linkText, { color: theme.text }]}>
+              <Text style={[authStyles.link, { color: theme.primary }]}>Back to Sign In</Text>
             </Text>
           </TouchableOpacity>
         </ScrollView>
       </KeyboardAvoidingView>
-    </View>
+    </SafeAreaWrapper>
   );
 }
