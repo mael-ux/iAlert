@@ -1,0 +1,10 @@
+{
+  "id": "EONET_v3_001",
+  "title": "Volcano - Test Island (v3 fixture)",
+  "description": "Minimal EONET v3-shaped event for normalize_eonet (Issue #45).",
+  "categories": [{ "id": "volcanoes", "title": "Volcanoes" }],
+  "sources": [{ "id": "SIVolcano", "url": "https://example.com/eonet-v3-source" }],
+  "geometry": [
+    { "date": "2026-09-19T12:00:00Z", "type": "Point", "coordinates": [140.1, 35.6] }
+  ]
+}

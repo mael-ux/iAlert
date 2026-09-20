@@ -2,8 +2,8 @@ import { pgTable, serial, text, timestamp, integer, date, numeric, jsonb, unique
 
 export const weatherCacheTable = pgTable("weather_cache", {
   id: serial("id").primaryKey(),
-  gridLat: numeric("grid_lat", { precision: 4, scale: 1 }).notNull(), 
-  gridLng: numeric("grid_lng", { precision: 4, scale: 1 }).notNull(), 
+  gridLat: numeric("grid_lat", { precision: 5, scale: 2 }).notNull(), 
+  gridLng: numeric("grid_lng", { precision: 5, scale: 2 }).notNull(), 
   weatherData: jsonb("weather_data"), 
   updatedAt: timestamp("updated_at").defaultNow(),
 }, (table) => {
@@ -15,7 +15,7 @@ export const weatherCacheTable = pgTable("weather_cache", {
 export const interestZonesTable = pgTable("interest_zone", {
   id: serial("id").primaryKey(),
   userId: text("user_id").notNull().references(() => usersTable.userId), 
-  title: text("title"),
+  title: text("title").notNull().default('Untitled zone'),
   latitude: numeric("latitude", { precision: 10, scale: 6 }).notNull(),
   longitude: numeric("longitude", { precision: 10, scale: 6 }).notNull(),
   createdAt: timestamp("created_at").defaultNow(),
@@ -24,7 +24,7 @@ export const interestZonesTable = pgTable("interest_zone", {
 export const usersTable = pgTable("users", {
   userId: text("user_id").primaryKey(), 
   name: text("name"),
-  email: text("email").notNull(), 
+  email: text("email"), 
   location: text("location"),
 });
 

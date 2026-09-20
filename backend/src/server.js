@@ -82,9 +82,16 @@ app.get("/api/search-city", async (req, res) => {
 // =========================
 app.post("/api/interestZone", async (req, res) => {
   try {
-    const { userId, title, latitude, longitude } = req.body;
+    const { userId, latitude, longitude } = req.body;
+    // Issue #45: title is NOT NULL in the DB (default 'Untitled zone').
+    // Normalize at the boundary instead of rejecting: blank/missing titles
+    // fall back so the insert can never violate the constraint.
+    const title =
+      typeof req.body.title === "string" && req.body.title.trim()
+        ? req.body.title.trim()
+        : "Untitled zone";
 
-    if (!userId || !title || latitude === undefined || longitude === undefined) {
+    if (!userId || latitude === undefined || longitude === undefined) {
       return res.status(400).json({ error: "Missing required fields" });
     }
 
@@ -163,6 +170,10 @@ app.get("/api/photoOfTheDay", async (req, res) => {
       return res.status(200).json({
         title: "Horsehead Nebula",
         image: "https://apod.nasa.gov/apod/image/2301/Horsehead_Hubble_1225.jpg",
+        // DEPRECATED alias for `image`: kept so older mobile clients that read
+        // `url` keep working without a coordinated app release. New code must
+        // use `image` (the DB column name, Issue #45).
+        url: "https://apod.nasa.gov/apod/image/2301/Horsehead_Hubble_1225.jpg",
         description: "The Horsehead Nebula is one of the most identifiable nebulae in the sky.",
         credits: "NASA, ESA, Hubble Heritage Team",
       });
@@ -173,6 +184,8 @@ app.get("/api/photoOfTheDay", async (req, res) => {
     res.status(200).json({
       title: randomPhoto.title,
       image: randomPhoto.image,
+      // DEPRECATED alias for `image` (see above, Issue #45).
+      url: randomPhoto.image,
       description: randomPhoto.description || "",
       credits: randomPhoto.credits || "",
     });
@@ -184,6 +197,8 @@ app.get("/api/photoOfTheDay", async (req, res) => {
     res.status(200).json({
       title: "Horsehead Nebula",
       image: "https://apod.nasa.gov/apod/image/2301/Horsehead_Hubble_1225.jpg",
+      // DEPRECATED alias for `image` (Issue #45, see above).
+      url: "https://apod.nasa.gov/apod/image/2301/Horsehead_Hubble_1225.jpg",
       description: "The Horsehead Nebula is one of the most identifiable nebulae in the sky.",
       credits: "NASA, ESA, Hubble Heritage Team",
     });
@@ -208,11 +223,16 @@ app.get("/api/photos", async (req, res) => {
 
     console.log(`✅ Found ${allPhotos.length} photos`);
     
-    // Map to match frontend expectations (url instead of image)
+    // Issue #45: canonical photo field is `image` (the DB column name, also
+    // used by GET /api/photoOfTheDay and mobile/app/index.jsx). `url` is kept
+    // as a DEPRECATED alias because mobile/app/Nasa.jsx reads `item.url` /
+    // `selectedPhoto.url` — removing it would break the gallery without a
+    // coordinated app release. New code must use `image`.
     const photos = allPhotos.map(photo => ({
       id: photo.id,
       title: photo.title,
-      url: photo.image,  // Map 'image' column to 'url' for frontend
+      image: photo.image,
+      url: photo.image,  // DEPRECATED alias for `image` (see above).
       description: photo.description || "",
       credits: photo.credits || "",
       date: photo.date

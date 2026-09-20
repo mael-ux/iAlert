@@ -55,7 +55,9 @@ router.post("/clerk", async (req, res) => {
   if (eventType === "user.created") {
     const { id, email_addresses, first_name, last_name } = evt.data;
     
-    const email = email_addresses[0]?.email_address;
+    // Issue #45: Clerk may omit email addresses (users.email is nullable).
+    // Tolerate a missing email with NULL — never invent a fake address.
+    const email = email_addresses[0]?.email_address ?? null;
     const name = [first_name, last_name].filter(Boolean).join(" ") || null;
 
     try {
@@ -79,7 +81,8 @@ router.post("/clerk", async (req, res) => {
   if (eventType === "user.updated") {
     const { id, email_addresses, first_name, last_name } = evt.data;
     
-    const email = email_addresses[0]?.email_address;
+    // Issue #45: same null-tolerance as user.created — never a fake address.
+    const email = email_addresses[0]?.email_address ?? null;
     const name = [first_name, last_name].filter(Boolean).join(" ") || null;
 
     try {

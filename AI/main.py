@@ -241,6 +241,63 @@ _disasters_cache = {
     "ttl": 300  # 5 minutes cache
 }
 
+
+def normalize_eonet(evt):
+    """
+    Normalize one raw NASA EONET event (v2.1 or v3 shape) into the dict served
+    by GET /api/disasters. Returns None when the event carries no usable
+    geometry/coordinates and must be skipped.
+
+    Version duality handled here (and only here — Issue #45):
+    - v3 uses "geometry", v2.1 uses "geometries" (either may be a list whose
+      last entry is the latest observation, or a single object).
+    - categories/sources entries are dicts in both versions; anything else is
+      stringified/ignored defensively.
+    Versioned fixtures live in AI/fixtures/eonet_v2.json and eonet_v3.json.
+    """
+    if not isinstance(evt, dict):
+        return None
+
+    # v3 uses "geometry", v2.1 uses "geometries"
+    geometries = evt.get("geometry") or evt.get("geometries")
+
+    if not geometries:
+        return None
+
+    # Get latest geometry
+    geom = geometries[-1] if isinstance(geometries, list) else geometries
+    if not isinstance(geom, dict):
+        return None
+
+    coords = geom.get("coordinates", [])
+    if len(coords) < 2:
+        return None
+
+    # Extract category
+    categories = evt.get("categories", [])
+    category = "unknown"
+    if categories and len(categories) > 0:
+        cat_obj = categories[0]
+        category = cat_obj.get("id") if isinstance(cat_obj, dict) else str(cat_obj)
+
+    # Extract source link
+    sources = evt.get("sources", [])
+    link = None
+    if sources and len(sources) > 0:
+        source_obj = sources[0]
+        link = source_obj.get("url") if isinstance(source_obj, dict) else None
+
+    return {
+        "id": evt.get("id"),
+        "title": evt.get("title"),
+        "description": evt.get("description", ""),
+        "category": category,
+        "lat": coords[1],
+        "lng": coords[0],
+        "date": geom.get("date"),
+        "link": link or evt.get("link")
+    }
+
 # Disasters proxy endpoint (bypasses mobile network restrictions)
 @app.get("/api/disasters")
 async def get_disasters(limit: int = 100, days: int = 30, force_refresh: bool = False):
@@ -302,49 +359,12 @@ async def get_disasters(limit: int = 100, days: int = 30, force_refresh: bool = 
                 
                 print(f"✅ Got {len(events)} events from {url[:40]}...")
                 
-                # Process events - handle both v2.1 and v3 formats
+                # Process events - single version-tolerant normalizer (Issue #45)
                 processed_events = []
                 for evt in events:
-                    # v3 uses "geometry", v2.1 uses "geometries"
-                    geometries = evt.get("geometry") or evt.get("geometries")
-                    
-                    if not geometries or len(geometries) == 0:
-                        continue
-                    
-                    # Get latest geometry
-                    geom = geometries[-1] if isinstance(geometries, list) else geometries
-                    
-                    # v3: coordinates array, v2.1: coordinates in different format
-                    coords = geom.get("coordinates", [])
-                    
-                    if len(coords) < 2:
-                        continue
-                    
-                    # Extract category
-                    categories = evt.get("categories", [])
-                    category = "unknown"
-                    if categories and len(categories) > 0:
-                        # v3: categories[0]["id"], v2.1: categories[0]["id"] (same)
-                        cat_obj = categories[0]
-                        category = cat_obj.get("id") if isinstance(cat_obj, dict) else str(cat_obj)
-                    
-                    # Extract source link
-                    sources = evt.get("sources", [])
-                    link = None
-                    if sources and len(sources) > 0:
-                        source_obj = sources[0]
-                        link = source_obj.get("url") if isinstance(source_obj, dict) else None
-                    
-                    processed_events.append({
-                        "id": evt.get("id"),
-                        "title": evt.get("title"),
-                        "description": evt.get("description", ""),
-                        "category": category,
-                        "lat": coords[1],
-                        "lng": coords[0],
-                        "date": geom.get("date"),
-                        "link": link or evt.get("link")
-                    })
+                    normalized = normalize_eonet(evt)
+                    if normalized is not None:
+                        processed_events.append(normalized)
                 
                 result = {
                     "status": "ok",
