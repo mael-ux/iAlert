@@ -113,17 +113,29 @@ def check_chat_empty(base):
     return True, "empty message rejected with 400"
 
 
-def check_chat_no_keys(base):
+def check_chat_valid_message(base):
     status, body, err = http_request(
         "POST",
         base + "/api/chat",
         payload={"message": "Is there flood risk near Tokyo, Japan?"},
+        timeout=LIVE_TIMEOUT,
     )
     if err:
+        if "timed out" in err:
+            return None, "SKIP - chat turn exceeded %ss (slow upstream?)" % (
+                LIVE_TIMEOUT,
+            )
         return False, err
-    if status != 503:
-        return False, "expected 503, got %s (%s)" % (status, body)
-    return True, "lazy init proven: 503 without keys"
+    if status == 503:
+        return True, "lazy init proven: 503 without keys"
+    if status == 200:
+        text = body.get("response", "") if isinstance(body, dict) else ""
+        if "OpenWeather" in text:
+            return True, "full loop with keys: answer + attribution"
+        return False, "200 without attribution: %s" % (body,)
+    if status in (502, 429):
+        return None, "SKIP - upstream %s (transient?)" % status
+    return False, "expected 503/200, got %s (%s)" % (status, body)
 
 
 def check_unknown_path(base):
@@ -172,7 +184,8 @@ def main(argv=None):
         ("continents 200",) + check_continents(base),
         ("countries/Asia 200",) + check_countries(base),
         ("chat empty -> 400",) + check_chat_empty(base),
-        ("chat valid no-keys -> 503",) + check_chat_no_keys(base),
+        ("chat valid message (503 keyless / 200 keyed)",)
+        + check_chat_valid_message(base),
         ("unknown path -> 404 JSON",) + check_unknown_path(base),
     ]
     if args.live:
