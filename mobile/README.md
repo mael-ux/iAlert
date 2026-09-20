@@ -83,6 +83,9 @@ Debes ejecutar **ambas partes** (backend y mobile) en terminales separadas.
     ```
     El servidor se ejecutará en `http://localhost:5001`.
 
+    > **Puertos canónicos:** el backend usa `5001` (ver `backend/src/config/env.js`); el servicio de IA es independiente y usa `8000`.
+    > **Keep-alive:** en producción los cron jobs (self health-ping + limpieza de fotos) corren por defecto. En staging/preview podés activarlos con `KEEP_ALIVE=true` sin cambiar `NODE_ENV`.
+
 ### 2. Configuración de la App Móvil
 
 1.  En una **nueva terminal**, navega a la carpeta de la app móvil:
