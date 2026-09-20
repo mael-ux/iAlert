@@ -3,12 +3,6 @@ fastapi==0.115.5
 uvicorn[standard]==0.32.1
 pydantic==2.12.5
 
-# Machine Learning
-scikit-learn==1.7.2
-pandas==2.2.3
-numpy==2.2.1
-joblib==1.4.2
-
 # CORS support
 python-multipart==0.0.20
 
