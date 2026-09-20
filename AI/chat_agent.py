@@ -2,9 +2,10 @@
 iAlert — GenAI conversational agent module.
 
 Server-side bounded manual function-calling loop against Gemini with a single
-`get_weather_onecall` tool backed by the OpenWeather One Call API 3.0.
+`get_weather_free` tool backed by OpenWeather's free endpoints (Current
+Weather + 5-day/3-hour Forecast).
 
-Design notes (see openspec/changes/genai-chatbot/design.md):
+Design notes (see openspec/changes/free-weather-tool/design.md):
 - Sessions are an in-memory dict, capped at the last 20 turns, lazy expiry.
 - SDK automatic function calling is DISABLED; at most 2 tool iterations/turn.
 - Gemini client init is lazy: a missing GEMINI_API_KEY surfaces as a
@@ -16,10 +17,12 @@ Design notes (see openspec/changes/genai-chatbot/design.md):
 from __future__ import annotations
 
 import os
+import threading
 import time
 import uuid
+from collections import Counter
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple
 
 # ---------------------------------------------------------------------------
@@ -28,14 +31,14 @@ from typing import Any, Dict, List, Optional, Tuple
 
 ATTRIBUTION_TEXT = "Weather data provided by OpenWeather"
 
-ONECALL_ENDPOINT = "https://api.openweathermap.org/data/3.0/onecall"
-ONECALL_EXCLUDE = "minutely,alerts"
+FREE_CURRENT_ENDPOINT = "https://api.openweathermap.org/data/2.5/weather"
+FREE_FORECAST_ENDPOINT = "https://api.openweathermap.org/data/2.5/forecast"
 
-CACHE_TTL_SECONDS = 12 * 60  # 12 minutes, inside the spec's 10-15 min window
+CACHE_TTL_SECONDS = 5 * 60  # 5 minutes per the free-weather-tool spec
 MAX_TURNS_PER_SESSION = 20
 MAX_TOOL_ITERATIONS = 2
 SESSION_TTL_SECONDS = 24 * 60 * 60  # lazy expiry after 24h of inactivity
-ONECALL_DAILY_QUOTA = 1000
+FREE_MAX_RPM = 50  # per-minute guard, headroom under the 60/min free tier
 
 DEFAULT_GEMINI_MODEL = "gemini-3.8-flash"
 
@@ -49,9 +52,11 @@ ERROR_WEATHER_UNAVAILABLE = (
     "Weather data is unavailable right now, please try again later."
 )
 ERROR_SERVICE_BUSY = "Service is busy, please try again shortly."
-ERROR_QUOTA_EXHAUSTED = (
-    "Weather data is temporarily unavailable due to quota limits. "
-    "Please try again later."
+ERROR_RETRY_SHORTLY = (
+    "weather data temporarily unavailable, please retry shortly"
+)
+ERROR_INVALID_KEY = (
+    "Weather service API key is invalid or missing."
 )
 
 
@@ -143,9 +148,11 @@ def clear_sessions() -> None:
 # ---------------------------------------------------------------------------
 
 GET_WEATHER_TOOL_SCHEMA: Dict[str, Any] = {
-    "name": "get_weather_onecall",
+    "name": "get_weather_free",
     "description": (
-        "Current weather plus hourly and daily forecast for a coordinate."
+        "Current weather plus 3-hourly forecast (next ~48h) and derived "
+        "daily aggregates for a coordinate. Forecast steps are 3-hour "
+        "intervals."
     ),
     "parameters": {
         "type": "object",
@@ -160,7 +167,7 @@ GET_WEATHER_TOOL_SCHEMA: Dict[str, Any] = {
 
 
 def validate_tool_args(args: Dict[str, Any]) -> Tuple[bool, str]:
-    """Validate get_weather_onecall args against bounds and schema.
+    """Validate get_weather_free args against bounds and schema.
 
     Returns (ok, error_message). Never raises on bad input.
     """
@@ -206,7 +213,7 @@ def resolve_coords(
 
 
 # ---------------------------------------------------------------------------
-# One Call cache + daily quota counter
+# Free-endpoint cache (5-min TTL) + per-minute guard
 # ---------------------------------------------------------------------------
 
 
@@ -216,9 +223,13 @@ class _CacheEntry:
     timestamp: float
 
 
-_onecall_cache: Dict[str, _CacheEntry] = {}
-_onecall_calls_today: int = 0
-_onecall_counter_day: Optional[str] = None
+_free_cache: Dict[str, _CacheEntry] = {}
+
+# Guard + cache writes share one lock (cheap, uncontended; safe under
+# uvicorn's threadpool plus our fan-out threads).
+_free_lock = threading.Lock()
+_free_window_start: float = 0.0
+_free_window_count: int = 0
 
 
 def cache_key_for(lat: float, lon: float, units: str) -> str:
@@ -226,41 +237,52 @@ def cache_key_for(lat: float, lon: float, units: str) -> str:
     return f"{round(lat * 10) / 10:.1f}:{round(lon * 10) / 10:.1f}:{units}"
 
 
-def _today_utc() -> str:
-    return datetime.now(timezone.utc).strftime("%Y-%m-%d")
-
-
-def _reset_daily_counter_if_new_day() -> None:
-    global _onecall_calls_today, _onecall_counter_day
-    today = _today_utc()
-    if _onecall_counter_day != today:
-        _onecall_counter_day = today
-        _onecall_calls_today = 0
-
-
 def get_cached(key: str, now: Optional[float] = None) -> Optional[Dict[str, Any]]:
-    entry = _onecall_cache.get(key)
+    # Expired entries are deliberately RETAINED (not evicted) so that
+    # get_stale can serve them on the guard/failure fallback paths; a
+    # fresh fetch overwrites the entry. Chat traffic keeps key growth
+    # negligible.
+    with _free_lock:
+        entry = _free_cache.get(key)
     if entry is None:
         return None
     now = time.time() if now is None else now
     if (now - entry.timestamp) > CACHE_TTL_SECONDS:
-        _onecall_cache.pop(key, None)
         return None
     return entry.normalized
 
 
 def get_stale(key: str) -> Optional[Dict[str, Any]]:
-    """Return cached data regardless of TTL (quota-exhaustion fallback)."""
-    entry = _onecall_cache.get(key)
+    """Return cached data regardless of TTL (guard/failure fallback)."""
+    with _free_lock:
+        entry = _free_cache.get(key)
     return entry.normalized if entry else None
 
 
-def clear_onecall_cache() -> None:
-    """Test helper: drop cache and reset the daily counter."""
-    global _onecall_calls_today, _onecall_counter_day
-    _onecall_cache.clear()
-    _onecall_calls_today = 0
-    _onecall_counter_day = None
+def _check_free_rpm() -> None:
+    """Fixed-window per-minute guard, mirroring `_check_gemini_rpm`.
+
+    Raises UpstreamUnavailableError with the spec's retry-shortly message
+    when the FREE_MAX_RPM budget for the current 60s window is exhausted.
+    """
+    global _free_window_start, _free_window_count
+    now = time.time()
+    with _free_lock:
+        if (now - _free_window_start) >= 60:
+            _free_window_start = now
+            _free_window_count = 0
+        if _free_window_count >= FREE_MAX_RPM:
+            raise UpstreamUnavailableError(ERROR_RETRY_SHORTLY)
+        _free_window_count += 1
+
+
+def clear_free_cache() -> None:
+    """Test helper: drop cache and reset the per-minute guard window."""
+    global _free_window_start, _free_window_count
+    with _free_lock:
+        _free_cache.clear()
+        _free_window_start = 0.0
+        _free_window_count = 0
 
 
 # ---------------------------------------------------------------------------
@@ -276,47 +298,106 @@ def _describe(weather_list: Any) -> str:
     return ""
 
 
-def normalize_onecall(raw: Dict[str, Any]) -> Dict[str, Any]:
-    """Normalize a raw One Call payload to the internal format.
+def normalize_free_merged(
+    weather_raw: Dict[str, Any], forecast_raw: Dict[str, Any]
+) -> Dict[str, Any]:
+    """Normalize merged Current + Forecast payloads to the internal format.
 
     Output: {current: {temp, humidity, description}, hourly, daily}.
-    Tolerant of missing sections (defaults to empty lists / None metrics).
+    Each payload normalizes independently (missing side defaults to
+    empty/None), so a single-endpoint failure still yields servable
+    partial data.
+
+    - current from `/weather`: main.temp/main.humidity + weather[0].
+    - hourly from `/forecast` list, truncated to the first 16 entries
+      (~48h at 3-hour steps).
+    - daily derived per UTC day from the forecast list: temp {min,max},
+      humidity as the day-mean (rounded), description as the dominant
+      (modal) 3-hour description.
     """
-    current_raw = raw.get("current", {}) if isinstance(raw, dict) else {}
+    weather_raw = weather_raw if isinstance(weather_raw, dict) else {}
+    forecast_raw = forecast_raw if isinstance(forecast_raw, dict) else {}
+
+    main = weather_raw.get("main", {})
+    if not isinstance(main, dict):
+        main = {}
     current = {
-        "temp": current_raw.get("temp"),
-        "humidity": current_raw.get("humidity"),
-        "description": _describe(current_raw.get("weather", [])),
+        "temp": main.get("temp"),
+        "humidity": main.get("humidity"),
+        "description": _describe(weather_raw.get("weather", [])),
     }
 
-    hourly: List[Dict[str, Any]] = []
-    for item in raw.get("hourly", []) or []:
+    entries: List[Dict[str, Any]] = []
+    for item in forecast_raw.get("list", []) or []:
         if not isinstance(item, dict):
             continue
-        hourly.append(
+        item_main = item.get("main", {})
+        if not isinstance(item_main, dict):
+            item_main = {}
+        entries.append(
             {
                 "dt": item.get("dt"),
-                "temp": item.get("temp"),
-                "humidity": item.get("humidity"),
+                "temp": item_main.get("temp"),
+                "humidity": item_main.get("humidity"),
                 "description": _describe(item.get("weather", [])),
             }
         )
 
-    daily: List[Dict[str, Any]] = []
-    for item in raw.get("daily", []) or []:
-        if not isinstance(item, dict):
-            continue
-        temp_block = item.get("temp", {})
-        daily.append(
-            {
-                "dt": item.get("dt"),
-                "temp": temp_block if isinstance(temp_block, dict) else {},
-                "humidity": item.get("humidity"),
-                "description": _describe(item.get("weather", [])),
-            }
-        )
+    hourly = entries[:16]
+
+    daily = _daily_aggregates(entries)
 
     return {"current": current, "hourly": hourly, "daily": daily}
+
+
+def _daily_aggregates(entries: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Group 3-hourly entries per UTC day into {min,max} aggregates.
+
+    Day buckets use integer arithmetic (dt // 86400); the daily dt is
+    the bucket's UTC midnight. Non-numeric temps/humidities are ignored.
+    """
+    buckets: Dict[int, List[Dict[str, Any]]] = {}
+    for item in entries:
+        dt = item.get("dt")
+        if isinstance(dt, bool) or not isinstance(dt, (int, float)):
+            continue
+        buckets.setdefault(int(dt) // 86400, []).append(item)
+
+    daily: List[Dict[str, Any]] = []
+    for day_key in sorted(buckets):
+        items = buckets[day_key]
+        temps = [
+            i["temp"]
+            for i in items
+            if isinstance(i.get("temp"), (int, float))
+            and not isinstance(i.get("temp"), bool)
+        ]
+        humidities = [
+            i["humidity"]
+            for i in items
+            if isinstance(i.get("humidity"), (int, float))
+            and not isinstance(i.get("humidity"), bool)
+        ]
+        descriptions = [i["description"] for i in items if i.get("description")]
+        dominant = (
+            Counter(descriptions).most_common(1)[0][0] if descriptions else ""
+        )
+        daily.append(
+            {
+                "dt": day_key * 86400,
+                "temp": {
+                    "min": min(temps) if temps else None,
+                    "max": max(temps) if temps else None,
+                },
+                "humidity": (
+                    round(sum(humidities) / len(humidities))
+                    if humidities
+                    else None
+                ),
+                "description": dominant,
+            }
+        )
+    return daily
 
 
 def inject_attribution(response_text: str, tool_used: bool) -> str:
@@ -327,66 +408,104 @@ def inject_attribution(response_text: str, tool_used: bool) -> str:
 
 
 # ---------------------------------------------------------------------------
-# One Call fetch (httpx, explicit timeouts)
+# Free-endpoint fetch (httpx, explicit timeouts, parallel fan-out)
 # ---------------------------------------------------------------------------
 
 
-def fetch_onecall(
-    lat: float, lon: float, units: str = "metric"
-) -> Tuple[Dict[str, Any], bool]:
-    """Fetch normalized One Call data. Returns (normalized, cached).
+def _fetch_one(url: str, params: Dict[str, Any]) -> Tuple[Any, str]:
+    """GET one free endpoint. Returns (payload_or_None, status).
 
-    Raises UpstreamUnavailableError on transport/API failure, and
-    ServiceNotConfiguredError when the One Call key is missing.
-    On daily quota exhaustion, serves stale cache when available.
+    Status is "ok", "unauthorized" (HTTP 401), or "failed" (any other
+    transport/API/parse problem). Never includes the API key in anything
+    raised or returned.
     """
     import httpx
 
-    global _onecall_calls_today
-    _reset_daily_counter_if_new_day()
+    try:
+        resp = httpx.get(
+            url, params=params, timeout=httpx.Timeout(10.0, connect=5.0)
+        )
+    except Exception:
+        return None, "failed"
+    if resp.status_code == 401:
+        return None, "unauthorized"
+    try:
+        resp.raise_for_status()
+    except Exception:
+        return None, "failed"
+    try:
+        data = resp.json()
+    except Exception:
+        return None, "failed"
+    return data if isinstance(data, dict) else {}, "ok"
+
+
+def fetch_free(
+    lat: float, lon: float, units: str = "metric"
+) -> Tuple[Dict[str, Any], bool]:
+    """Fetch normalized free-endpoint data. Returns (normalized, cached).
+
+    Calls Current Weather + 5-day/3-hour Forecast in parallel and merges
+    them. Guard counting unit: one increment per fetch_free cache miss
+    (the upstream fan-out counts as a single unit against the budget).
+
+    Raises ServiceNotConfiguredError when OPENWEATHER_API_KEY is missing
+    (at tool-call time, never at import/startup), and
+    UpstreamUnavailableError on transport/API failure. A 401 from either
+    endpoint maps to an invalid-key error (takes precedence over partial
+    data); any other single-endpoint failure serves partial normalized
+    data WITH attribution downstream. Both failing serves stale cache
+    when present, else UpstreamUnavailableError. A tripped per-minute
+    guard serves stale cache when present, else the retry-shortly error.
+    """
     key = cache_key_for(lat, lon, units)
 
     hit = get_cached(key)
     if hit is not None:
         return hit, True
 
-    api_key = os.environ.get("OPENWEATHER_ONE_CALL_API_KEY")
+    api_key = os.environ.get("OPENWEATHER_API_KEY")
     if not api_key:
         raise ServiceNotConfiguredError(
-            "Weather service not configured (missing One Call API key)"
+            "Weather service not configured (missing API key)"
         )
-
-    if _onecall_calls_today >= ONECALL_DAILY_QUOTA:
-        stale = get_stale(key)
-        if stale is not None:
-            return stale, True
-        raise UpstreamUnavailableError(ERROR_QUOTA_EXHAUSTED)
 
     try:
-        resp = httpx.get(
-            ONECALL_ENDPOINT,
-            params={
-                "lat": lat,
-                "lon": lon,
-                "units": units,
-                "exclude": ONECALL_EXCLUDE,
-                "appid": api_key,
-            },
-            timeout=httpx.Timeout(10.0, connect=5.0),
-        )
-        resp.raise_for_status()
-        raw = resp.json()
-    except Exception as exc:
+        _check_free_rpm()
+    except UpstreamUnavailableError:
         stale = get_stale(key)
         if stale is not None:
             return stale, True
-        raise UpstreamUnavailableError(ERROR_WEATHER_UNAVAILABLE) from exc
+        raise
 
-    _onecall_calls_today += 1
-    normalized = normalize_onecall(raw if isinstance(raw, dict) else {})
-    _onecall_cache[key] = _CacheEntry(
-        normalized=normalized, timestamp=time.time()
+    base_params = {"lat": lat, "lon": lon, "units": units, "appid": api_key}
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        fut_current = pool.submit(
+            _fetch_one, FREE_CURRENT_ENDPOINT, dict(base_params)
+        )
+        fut_forecast = pool.submit(
+            _fetch_one, FREE_FORECAST_ENDPOINT, dict(base_params)
+        )
+        weather_raw, current_status = fut_current.result()
+        forecast_raw, forecast_status = fut_forecast.result()
+
+    if current_status == "unauthorized" or forecast_status == "unauthorized":
+        raise UpstreamUnavailableError(ERROR_INVALID_KEY)
+
+    if current_status != "ok" and forecast_status != "ok":
+        stale = get_stale(key)
+        if stale is not None:
+            return stale, True
+        raise UpstreamUnavailableError(ERROR_WEATHER_UNAVAILABLE)
+
+    normalized = normalize_free_merged(
+        weather_raw if isinstance(weather_raw, dict) else {},
+        forecast_raw if isinstance(forecast_raw, dict) else {},
     )
+    with _free_lock:
+        _free_cache[key] = _CacheEntry(
+            normalized=normalized, timestamp=time.time()
+        )
     return normalized, False
 
 
@@ -499,7 +618,9 @@ SYSTEM_PROMPT = (
     "You are iAlert, a helpful assistant for weather and disaster-risk "
     "questions. Answer concisely in the user's language. When a location is "
     "mentioned and current weather or forecast data would help, call "
-    "get_weather_onecall with that place's latitude and longitude. "
+    "get_weather_free with that place's latitude and longitude. "
+    "Forecast steps are 3-hour intervals; state the time resolution when "
+    "giving time-sensitive risk answers. "
     "If the user refers to a previous place, reuse the conversation context."
 )
 
@@ -515,7 +636,7 @@ def run_chat_turn(
 
     Raises BadRequestError (empty message / failed coord retry),
     ServiceNotConfiguredError (missing key), RateLimitedError (429),
-    UpstreamUnavailableError (One Call failure).
+    UpstreamUnavailableError (free-endpoint failure).
     """
     if not message or not message.strip():
         raise BadRequestError(ERROR_EMPTY_MESSAGE)
@@ -579,14 +700,14 @@ def run_chat_turn(
 
         calls = _extract_function_calls(response)
         valid_call = next(
-            (c for c in calls if c["name"] == "get_weather_onecall"), None
+            (c for c in calls if c["name"] == "get_weather_free"), None
         )
         if valid_call is None:
             # Model asked for an unknown tool: one correction retry, then error.
-            unknown = [c for c in calls if c["name"] != "get_weather_onecall"]
+            unknown = [c for c in calls if c["name"] != "get_weather_free"]
             if unknown and len(tool_calls) == 0:
                 prompt += (
-                    "\n[Only the get_weather_onecall tool is available. "
+                    "\n[Only the get_weather_free tool is available. "
                     "Answer directly or call it with valid lat/lon.]"
                 )
                 continue
@@ -615,11 +736,11 @@ def run_chat_turn(
         tool_lat = float(args["lat"])
         tool_lon = float(args["lon"])
         tool_units = str(args.get("units", units))
-        normalized, cached = fetch_onecall(tool_lat, tool_lon, tool_units)
+        normalized, cached = fetch_free(tool_lat, tool_lon, tool_units)
         tool_used = True
         tool_calls.append(
             {
-                "name": "get_weather_onecall",
+                "name": "get_weather_free",
                 "args": {
                     "lat": tool_lat,
                     "lon": tool_lon,
@@ -630,7 +751,7 @@ def run_chat_turn(
         )
         session.last_coords = {"lat": tool_lat, "lon": tool_lon}
         prompt += (
-            f"\n[Tool get_weather_onecall result (cached={cached}): "
+            f"\n[Tool get_weather_free result (cached={cached}): "
             f"{normalized}. Now answer the user concisely.]"
         )
         # Next loop iteration produces the final text; bound the loop.

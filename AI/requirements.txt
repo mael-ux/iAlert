@@ -12,6 +12,6 @@ joblib==1.4.2
 # CORS support
 python-multipart==0.0.20
 
-# GenAI chatbot (google-genai SDK + httpx for One Call tool calls)
+# GenAI chatbot (google-genai SDK + httpx for free-endpoint tool calls)
 google-genai==2.23.0
 httpx==0.28.1

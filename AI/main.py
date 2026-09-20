@@ -280,7 +280,7 @@ async def predict_disaster(request: PredictionRequest):
 async def chat(request: ChatRequest):
     """
     Conversational weather/disaster-risk chat backed by Gemini with a
-    single get_weather_onecall tool. Unknown or expired session_ids
+    single get_weather_free tool. Unknown or expired session_ids
     start a fresh session without error.
     """
     if not request.message or not request.message.strip():
