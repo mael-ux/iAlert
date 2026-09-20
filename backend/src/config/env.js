@@ -11,6 +11,14 @@ export const ENV = {
   API_URL: process.env.NODE_ENV === "production"
     ? process.env.API_URL || "https://ialert.onrender.com/api"
     : process.env.API_URL || `http://localhost:${process.env.PORT || 5001}/api`,
+  // KEEP_ALIVE: explicit opt-in flag for cron jobs (self health-ping + photo cleanup).
+  // Default preserves the historical behavior exactly: on in production, off otherwise,
+  // so production is behavior-identical. Staging/preview can opt in with KEEP_ALIVE=true.
+  // NOTE: add `KEEP_ALIVE=` to backend/.env.example once fix/issue-43-env-hygiene merges.
+  KEEP_ALIVE:
+    process.env.KEEP_ALIVE !== undefined
+      ? process.env.KEEP_ALIVE === "true"
+      : process.env.NODE_ENV === "production",
 };
 
 // Validation: Log warnings if critical env vars are missing
