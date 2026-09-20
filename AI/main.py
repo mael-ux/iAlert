@@ -4,6 +4,7 @@ Handles chatbot and ML model predictions
 """
 
 from fastapi import FastAPI, HTTPException
+from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import joblib
@@ -497,17 +498,23 @@ async def get_disasters(limit: int = 100, days: int = 30, force_refresh: bool = 
 # Error handlers
 @app.exception_handler(404)
 async def not_found_handler(request, exc):
-    return {
-        "error": "Not found",
-        "detail": str(exc.detail) if hasattr(exc, 'detail') else "Resource not found"
-    }
+    return JSONResponse(
+        status_code=404,
+        content={
+            "error": "Not found",
+            "detail": str(exc.detail) if hasattr(exc, 'detail') else "Resource not found"
+        },
+    )
 
 @app.exception_handler(500)
 async def internal_error_handler(request, exc):
-    return {
-        "error": "Internal server error",
-        "detail": "An unexpected error occurred"
-    }
+    return JSONResponse(
+        status_code=500,
+        content={
+            "error": "Internal server error",
+            "detail": "An unexpected error occurred"
+        },
+    )
 
 # For local development
 if __name__ == "__main__":
