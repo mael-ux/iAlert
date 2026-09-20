@@ -8,8 +8,16 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import joblib
 import pandas as pd
-from typing import Dict, List
+from typing import Dict, List, Literal, Optional
 import os
+
+from AI.chat_agent import (
+    ChatError,
+    RateLimitedError,
+    get_or_create_session,
+    resolve_coords,
+    run_chat_turn,
+)
 
 # Initialize FastAPI app
 app = FastAPI(
@@ -27,6 +35,16 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Machine-readable deprecation signal for the legacy prediction endpoint.
+# Middleware (not endpoint code) so the header survives error responses too,
+# with zero behavior change to the endpoint itself.
+@app.middleware("http")
+async def legacy_deprecation_header(request, call_next):
+    response = await call_next(request)
+    if request.url.path == "/api/predict-disaster":
+        response.headers["Deprecation"] = "true"
+    return response
+
 # Global variables for model and data
 modelo = None
 codificador = None
@@ -42,6 +60,24 @@ class PredictionResponse(BaseModel):
     region: str
     country: str
     predictions: Dict[str, float]
+
+# GenAI chatbot models (POST /api/chat)
+class ToolCall(BaseModel):
+    name: str
+    args: Dict
+    cached: bool = False
+
+class ChatRequest(BaseModel):
+    message: str
+    session_id: Optional[str] = None
+    lat: Optional[float] = None
+    lon: Optional[float] = None
+    units: Literal["metric", "imperial"] = "metric"
+
+class ChatResponse(BaseModel):
+    response: str
+    session_id: str
+    tool_calls: Optional[List[ToolCall]] = None
 
 # Load model and prepare data on startup
 @app.on_event("startup")
@@ -178,15 +214,19 @@ async def get_continents() -> Dict[str, List[str]]:
         "continents": list(countries_by_continent.keys())
     }
 
-# Predict disaster
-@app.post("/api/predict-disaster", response_model=PredictionResponse)
+# Predict disaster (legacy — superseded by POST /api/chat, kept live for rollback)
+@app.post(
+    "/api/predict-disaster",
+    response_model=PredictionResponse,
+    description="Legacy prediction endpoint, superseded by POST /api/chat.",
+)
 async def predict_disaster(request: PredictionRequest):
     """
     Predict disaster probabilities for a given region and country
-    
+
     Args:
         request: PredictionRequest with region and country
-    
+
     Returns:
         Prediction probabilities for different disaster types
     """
@@ -232,6 +272,65 @@ async def predict_disaster(request: PredictionRequest):
             status_code=500,
             detail=f"Prediction error: {str(e)}"
         )
+
+# GenAI conversational agent (lazy Gemini init: missing GEMINI_API_KEY
+# returns 503 on this route only; all other routes keep working)
+@app.post("/api/chat", response_model=ChatResponse)
+async def chat(request: ChatRequest):
+    """
+    Conversational weather/disaster-risk chat backed by Gemini with a
+    single get_weather_onecall tool. Unknown or expired session_ids
+    start a fresh session without error.
+    """
+    if not request.message or not request.message.strip():
+        raise HTTPException(
+            status_code=400,
+            detail="message must be a non-empty string",
+        )
+
+    session = get_or_create_session(request.session_id)
+
+    # Explicit lat/lon are validated here so out-of-bounds values fail fast
+    # with 400 before reaching the agent loop.
+    if (request.lat is None) != (request.lon is None):
+        raise HTTPException(
+            status_code=400,
+            detail="lat and lon must be provided together",
+        )
+    if request.lat is not None and request.lon is not None:
+        check = resolve_coords(request.lat, request.lon, session)
+        if check is None:
+            raise HTTPException(
+                status_code=400,
+                detail="Invalid coordinates: lat must be -90..90, "
+                       "lon -180..180",
+            )
+
+    try:
+        text, tool_calls = run_chat_turn(
+            message=request.message,
+            session=session,
+            lat=request.lat,
+            lon=request.lon,
+            units=request.units,
+        )
+    except RateLimitedError as exc:
+        raise HTTPException(
+            status_code=exc.status_code,
+            detail=str(exc.detail),
+            headers={"Retry-After": str(exc.retry_after or 60)},
+        )
+    except ChatError as exc:
+        raise HTTPException(
+            status_code=exc.status_code,
+            detail=str(exc.detail),
+        )
+
+    return ChatResponse(
+        response=text,
+        session_id=session.session_id,
+        tool_calls=[ToolCall(**tc) for tc in tool_calls] or None,
+    )
 
 # Get model info
 @app.get("/api/model-info")
