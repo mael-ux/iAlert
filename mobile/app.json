@@ -87,7 +87,11 @@
         {
           "cameraPermission": "Permitir que $(PRODUCT_NAME) acceda a la cámara para activar el flash en alertas de emergencia."
         }
-      ]
+      ],
+      "expo-font",
+      "expo-image",
+      "expo-status-bar",
+      "expo-web-browser"
     ],
     "experiments": {
       "typedRoutes": true,
