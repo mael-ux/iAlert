@@ -1,5 +1,5 @@
 // mobile/app/alert-settings.jsx
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   View, Text, StyleSheet, Switch, ScrollView, 
   TouchableOpacity, ActivityIndicator, Alert,
@@ -15,8 +15,9 @@ import { useTheme } from './ThemeContext';
 import { API_URL } from '../constants/api';
 import * as Notifications from 'expo-notifications';
 import { CameraView, useCameraPermissions } from 'expo-camera';
-import { Audio } from 'expo-av';
+import { useAudioPlayer } from 'expo-audio';
 import * as Location from 'expo-location';
+
 
 // Configure notification behavior
 Notifications.setNotificationHandler({
@@ -41,14 +42,15 @@ export default function AlertSettingsScreen() {
   const { user } = useUser();
   const router = useRouter();
   const { theme } = useTheme();
+  const audioPlayer = useAudioPlayer(
+    require('../assets/sounds/alert.mp3')
+  );
   
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
-  const [sound, setSound] = useState(null);
   const [isAlarmPlaying, setIsAlarmPlaying] = useState(false);
   const [flashEnabled, setFlashEnabled] = useState(false);
   
-  const soundRef = useRef(null);
   const [permission, requestPermission] = useCameraPermissions();
 
   const [config, setConfig] = useState({
@@ -63,15 +65,9 @@ export default function AlertSettingsScreen() {
   });
 
   useEffect(() => {
-    if (user) {
-      loadConfig();
+  if (user) {
+    loadConfig();
     }
-    
-    return () => {
-      if (soundRef.current) {
-        soundRef.current.unloadAsync();
-      }
-    };
   }, [user]);
 
   const loadConfig = async () => {
@@ -120,71 +116,48 @@ export default function AlertSettingsScreen() {
   };
 
   const stopAlarm = async () => {
-    try {
-      if (soundRef.current) {
-        await soundRef.current.stopAsync();
-        await soundRef.current.unloadAsync();
-        soundRef.current = null;
-      }
-      if (sound) {
-        await sound.stopAsync();
-        await sound.unloadAsync();
-      }
-      setSound(null);
-    } catch (err) {
-      console.log('Error stopping sound', err);
-    }
-    Vibration.cancel();
-    setFlashEnabled(false);
-    setIsAlarmPlaying(false);
-    console.log('🛑 Alarm stopped');
-  };
+  try {
+    audioPlayer.pause();
+    audioPlayer.seekTo(0);
+  } catch (err) {
+    console.log('Error stopping sound', err);
+  }
 
-  const playAlarmSound = async () => {
-    try {
-      if (soundRef.current) {
-        await soundRef.current.stopAsync();
-        await soundRef.current.unloadAsync();
-      }
+  Vibration.cancel();
+  setFlashEnabled(false);
+  setIsAlarmPlaying(false);
+  console.log('🛑 Alarm stopped');
+};
 
-      await Audio.requestPermissionsAsync();
-      await Audio.setAudioModeAsync({
-        allowsRecordingIOS: false,
-        playsInSilentModeIOS: true,
-        staysActiveInBackground: true,
-        shouldDuckAndroid: true,
-      });
+ const playAlarmSound = async () => {
+  try {
+    audioPlayer.volume = config.soundLevel / 100;
+    audioPlayer.loop = true;
 
-      const { sound: alarmSound } = await Audio.Sound.createAsync(
-        require('../assets/sounds/alert.mp3'),
-        { 
-          shouldPlay: true,
-          isLooping: true, 
-          volume: config.soundLevel / 100,
-        }
-      );
-      
-      setSound(alarmSound);
-      soundRef.current = alarmSound;
+    audioPlayer.play();
+
+    setIsAlarmPlaying(true);
+    console.log('🔊 Alarm sound playing');
+
+    setTimeout(() => {
+      stopAlarm();
+      console.log('🔕 Auto-stopped after 30s');
+    }, 30000);
+
+  } catch (error) {
+    console.error('Error playing alarm:', error);
+
+    if (config.vibrateEnabled) {
+      Vibration.vibrate([0, 500, 200, 500], true);
       setIsAlarmPlaying(true);
-      console.log('🔊 Alarm sound playing');
-
-      setTimeout(() => {
-        if (soundRef.current) {
-          stopAlarm();
-          console.log('🔕 Auto-stopped after 30s');
-        }
-      }, 30000);
-
-    } catch (error) {
-      console.error('Error playing alarm:', error);
-      if (config.vibrateEnabled) {
-         Vibration.vibrate([0, 500, 200, 500], true);
-         setIsAlarmPlaying(true);
-      }
-      Alert.alert('Error', 'No se pudo reproducir el sonido. Verifica que "alert.mp3" exista en assets/sounds.');
     }
-  };
+
+    Alert.alert(
+      'Error',
+      'No se pudo reproducir el sonido. Verifica que "alert.mp3" exista en assets/sounds.'
+    );
+  }
+};
 
   const testAlert = async () => {
     try {
