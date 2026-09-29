@@ -1,13 +1,13 @@
 # 🤖 iAlert AI Service
 
-FastAPI-based microservice for disaster prediction and chatbot functionality.
+FastAPI-based microservice for disaster data and GenAI chatbot functionality.
 
 ## 📋 Overview
 
 This service provides:
 - 🌍 **Country/Continent data** - Lists of countries organized by continent
-- 🔮 **Disaster predictions** - ML-based probability predictions for natural disasters
-- 💬 **Chatbot backend** - Powers the mobile app's disaster prediction chatbot
+- 🛰️ **Disaster data** - Active disasters proxied from NASA EONET
+- 💬 **Chatbot backend** - Powers the mobile app's GenAI disaster-risk chat
 
 ## 🏗️ Architecture
 
@@ -23,7 +23,7 @@ This service provides:
     │  Node.js    │   │ FastAPI  │   │   FastAPI    │
     │  Backend    │   │ AI Svc   │   │   Docs UI    │
     │             │   │          │   │  (Auto-gen)  │
-    │ • Weather   │   │ • ML     │   │              │
+    │ • Weather   │   │ • Chat   │   │              │
     │ • Users     │   │ • Chat   │   └──────────────┘
     │ • Zones     │   │ • Data   │
     └─────────────┘   └──────────┘
@@ -38,28 +38,20 @@ This service provides:
    pip install -r AI/requirements.txt
    ```
 
-2. **Make sure you have the model files:**
-   ```bash
-   ls AI/
-   # Should show:
-   # modelo_desastres.pkl
-   # codificador_labels.pkl
-   ```
-
-3. **Run the server:**
+2. **Run the server:**
    ```bash
    uvicorn AI.main:app --reload --port 8000
    ```
 
-4. **Test it:**
+3. **Test it:**
    ```bash
    # Open browser
    http://localhost:8000          # API root
    http://localhost:8000/docs     # Interactive API docs (Swagger UI)
    http://localhost:8000/redoc    # Alternative docs (ReDoc)
    
-   # Or use the test script
-   python AI/test_api.py
+    # Or use the test script
+    python AI/test_chat.py
    ```
 
 ### Production Deployment
@@ -90,7 +82,6 @@ Root endpoint - basic service info
 {
   "service": "iAlert AI Service",
   "status": "online",
-  "model_loaded": true,
   "version": "1.0.0"
 }
 ```
@@ -100,20 +91,8 @@ Detailed health check
 ```json
 {
   "status": "healthy",
-  "model_status": "loaded",
   "countries_loaded": 5,
   "total_countries": 195
-}
-```
-
-#### `GET /api/model-info`
-Information about the ML model
-```json
-{
-  "model_type": "RandomForestClassifier",
-  "disaster_types": ["Flood", "Storm", "Earthquake", ...],
-  "num_disaster_types": 15,
-  "features": ["Region", "Country"]
 }
 ```
 
@@ -144,36 +123,6 @@ Get countries for a specific continent
 }
 ```
 
-### Prediction Endpoint
-
-#### `POST /api/predict-disaster`
-Get disaster probability predictions for a region/country
-
-**Request Body:**
-```json
-{
-  "region": "Asia",
-  "country": "Japan"
-}
-```
-
-**Response:**
-```json
-{
-  "status": "ok",
-  "region": "Asia",
-  "country": "Japan",
-  "predictions": {
-    "Flood": 0.4078,
-    "Storm": 0.2381,
-    "Earthquake": 0.1063,
-    "Landslide": 0.0892,
-    "Volcanic Activity": 0.0654,
-    ...
-  }
-}
-```
-
 ## 🧪 Testing
 
 ### Manual Testing with curl
@@ -184,26 +133,20 @@ curl http://localhost:8000/api/health
 
 # Get countries
 curl http://localhost:8000/api/countries/asia
-
-# Predict disaster
-curl -X POST http://localhost:8000/api/predict-disaster \
-  -H "Content-Type: application/json" \
-  -d '{"region": "Asia", "country": "Japan"}'
 ```
 
 ### Automated Testing
 
 ```bash
-python AI/test_api.py
+python AI/test_chat.py
 ```
 
 ## 📦 Dependencies
 
 - **FastAPI** - Modern web framework
 - **Uvicorn** - ASGI server
-- **scikit-learn** - Machine learning
-- **pandas** - Data manipulation
-- **joblib** - Model serialization
+- **google-genai** - GenAI chatbot backend
+- **httpx** - HTTP client for chatbot tool calls
 
 See [requirements.txt](requirements.txt) for versions.
 
@@ -213,14 +156,8 @@ See [requirements.txt](requirements.txt) for versions.
 AI/
 ├── main.py                    # FastAPI application
 ├── requirements.txt           # Python dependencies
-├── test_api.py               # API test suite
-│
-├── modelo_desastres.pkl      # Trained ML model
-├── codificador_labels.pkl    # Label encoder
-│
-├── entrenar.py               # Training script (reference)
-├── predict.py                # Old CLI prediction (reference)
-└── interfaz_desastres.py     # Old GUI (reference)
+├── chat_agent.py              # GenAI chatbot agent
+├── test_chat.py               # Chatbot test suite
 ```
 
 ## 🔧 Configuration
@@ -229,14 +166,7 @@ AI/
 
 - `PORT` - Server port (default: 8000)
 - `PYTHON_VERSION` - Python version for Render (3.11.0)
-
-### Model Files
-
-The service requires two files:
-1. `modelo_desastres.pkl` - RandomForest classifier
-2. `codificador_labels.pkl` - LabelEncoder for disaster types
-
-These must be in the `AI/` directory.
+- `GEMINI_API_KEY` - API key for the GenAI chatbot (`/api/chat` returns 503 without it)
 
 ## 🌐 CORS
 
@@ -268,11 +198,6 @@ https://your-service.onrender.com/api/health
 
 ### Common Issues
 
-**Model not loading:**
-- ✅ Check `.pkl` files exist in `AI/` folder
-- ✅ Verify files are in GitHub repo
-- ✅ Check file sizes (< 100MB each)
-
 **CORS errors:**
 - ✅ Verify CORS middleware is enabled
 - ✅ Check mobile app URL matches server URL
@@ -290,7 +215,7 @@ https://your-service.onrender.com/api/health
 ### Response Times
 - Health check: ~50ms
 - Countries list: ~50ms
-- Prediction: ~100-200ms
+- Chat: depends on Gemini API latency
 
 ### Free Tier Limitations
 - Spins down after 15 minutes of inactivity
@@ -315,7 +240,6 @@ https://your-service.onrender.com/api/health
 
 - [FastAPI Documentation](https://fastapi.tiangolo.com/)
 - [Render Documentation](https://render.com/docs)
-- [scikit-learn Docs](https://scikit-learn.org/)
 
 ## 🤝 Contributing
 
@@ -330,7 +254,7 @@ Part of the iAlert disaster monitoring system.
 Issues? Check:
 1. [DEPLOYMENT_GUIDE.md](../DEPLOYMENT_GUIDE.md)
 2. Render logs
-3. Test with `test_api.py`
+3. Test with `test_chat.py`
 
 ---
 
