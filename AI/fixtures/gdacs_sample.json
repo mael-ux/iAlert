@@ -1,0 +1,32 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "bbox": [-113.0, 25.0, -113.0, 25.0],
+      "geometry": {
+        "type": "Point",
+        "coordinates": [-113.0, 25.0]
+      },
+      "properties": {
+        "eventtype": "TC",
+        "eventid": 1001325,
+        "episodeid": 33,
+        "eventname": "POLO-26",
+        "name": "Tropical Cyclone POLO-26",
+        "description": "Orange Tropical Cyclone POLO-26 in Mexico",
+        "url": {
+          "report": "https://www.gdacs.org/report.aspx?eventid=1001325&episodeid=33&eventtype=TC"
+        },
+        "alertlevel": "Orange",
+        "alertscore": 2,
+        "country": "Mexico",
+        "fromdate": "2026-09-21T03:00:00",
+        "severitydata": {
+          "severity": 287.0,
+          "severityunit": "km/h"
+        }
+      }
+    }
+  ]
+}
