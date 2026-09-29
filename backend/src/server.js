@@ -24,11 +24,14 @@ const app = express();
 app.use("/api/webhooks", express.raw({ type: "application/json" }), webhooksRouter);
 app.use(express.json());
 
-const PORT = ENV.PORT || 8001;
+// 5001 is the canonical backend port (agrees with env.js default and README).
+const PORT = ENV.PORT || 5001;
 
-// FIXED: Start cron jobs in production
-if (ENV.NODE_ENV === "production") {
-  console.log("Starting cron jobs in production mode...");
+// Cron jobs (self health-ping keep-alive + photo cleanup) run when KEEP_ALIVE is set.
+// KEEP_ALIVE defaults to true in production and false otherwise, so production
+// behavior is unchanged; staging/preview can opt in with KEEP_ALIVE=true.
+if (ENV.KEEP_ALIVE) {
+  console.log("Starting cron jobs (KEEP_ALIVE enabled)...");
   healthCheckJob.start();
   photoJob.start();
   // eonetCheckJob.start(); // Uncomment if you have this
