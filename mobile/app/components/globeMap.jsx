@@ -14,6 +14,15 @@ try {
   AI_API_URL = "https://ialert-ai-service.onrender.com/api";
 }
 
+// Source display names & colors for legend badges
+const SOURCE_INFO = {
+  eonet: { name: "NASA EONET", color: "#4285f4" },
+  gdacs: { name: "GDACS", color: "#ea4335" },
+  usgs: { name: "USGS", color: "#fbbc05" },
+  reliefweb: { name: "ReliefWeb", color: "#34a853" },
+  default: { name: "Unknown", color: "#9aa0a6" },
+};
+
 const DISASTER_INFO = {
   wildfires: { name: "Wildfire", color: "#ff4500", emoji: "🔥", icon: "flame" },
   volcanoes: { name: "Volcano", color: "#dc143c", emoji: "🌋", icon: "triangle" },
@@ -39,6 +48,7 @@ export default function GlobeMap({ style }) {
   const [disastersData, setDisastersData] = useState([]);
   const [legendVisible, setLegendVisible] = useState(true);
   const [disasterCounts, setDisasterCounts] = useState({});
+  const [sourceCounts, setSourceCounts] = useState({});
 
   // Hide tab bar on this screen
   useEffect(() => {
@@ -65,16 +75,25 @@ export default function GlobeMap({ style }) {
       }
       
       const data = await response.json();
-      console.log(`✅ Loaded ${data.count} disasters`);
+      console.log(`✅ Loaded ${data.count} disasters from ${data.sources?.join(', ') || 'unknown sources'}`);
+      
+      // Normalize events: ensure source field exists
+      const normalizedEvents = (data.events || []).map(evt => ({
+        ...evt,
+        source: evt.source || 'eonet',
+      }));
       
       const counts = {};
-      data.events.forEach(evt => {
+      const sourceCountsMap = {};
+      normalizedEvents.forEach(evt => {
         counts[evt.category] = (counts[evt.category] || 0) + 1;
+        sourceCountsMap[evt.source] = (sourceCountsMap[evt.source] || 0) + 1;
       });
       
-      setDisastersData(data.events);
+      setDisastersData(normalizedEvents);
       setDisasterCounts(counts);
-      buildGlobe(data.events);
+      setSourceCounts(sourceCountsMap);
+      buildGlobe(normalizedEvents);
       
     } catch (err) {
       console.error('❌ Failed to fetch disasters:', err);
@@ -363,6 +382,19 @@ export default function GlobeMap({ style }) {
             </TouchableOpacity>
           </View>
           
+          {/* Source badges */}
+          {Object.keys(sourceCounts).length > 0 && (
+            <View style={styles.sourceBadges}>
+              {Object.entries(sourceCounts).map(([source, count]) => (
+                <View key={source} style={[styles.sourceBadge, { backgroundColor: (SOURCE_INFO[source]?.color || SOURCE_INFO.default.color) + '20' }]}>
+                  <Text style={[styles.sourceBadgeText, { color: SOURCE_INFO[source]?.color || SOURCE_INFO.default.color }]}>
+                    {SOURCE_INFO[source]?.name || source}: {count}
+                  </Text>
+                </View>
+              ))}
+            </View>
+          )}
+          
           <ScrollView 
             horizontal 
             showsHorizontalScrollIndicator={false}
@@ -416,6 +448,13 @@ export default function GlobeMap({ style }) {
                 <View style={modalStyles.badge}>
                   <Text style={modalStyles.badgeText}>{selectedEvent?.categoryName}</Text>
                 </View>
+                {selectedEvent?.source && (
+                  <View style={[modalStyles.badge, { backgroundColor: (SOURCE_INFO[selectedEvent.source]?.color || SOURCE_INFO.default.color) + '15' }]}>
+                    <Text style={[modalStyles.badgeText, { color: SOURCE_INFO[selectedEvent.source]?.color || SOURCE_INFO.default.color }]}>
+                      {SOURCE_INFO[selectedEvent.source]?.name || selectedEvent.source}
+                    </Text>
+                  </View>
+                )}
                 <Text style={modalStyles.date}>
                   {selectedEvent?.date ? new Date(selectedEvent.date).toLocaleDateString() : ''}
                 </Text>
@@ -534,6 +573,24 @@ const styles = StyleSheet.create({
     color: 'rgba(255, 255, 255, 0.5)',
     textAlign: 'center',
     marginTop: 12,
+  },
+  sourceBadges: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    paddingHorizontal: 20,
+    marginBottom: 12,
+  },
+  sourceBadge: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.2)',
+  },
+  sourceBadgeText: {
+    fontSize: 11,
+    fontWeight: '600',
   },
   legendToggle: {
     position: 'absolute',

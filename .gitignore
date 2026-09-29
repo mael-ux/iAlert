@@ -43,3 +43,5 @@ yarn-error.*
 backend/.env
 
 mobile/app/constants/api.js
+# Local Pi runtime state
+.atl/
