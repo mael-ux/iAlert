@@ -238,63 +238,6 @@ async def chat(request: ChatRequest):
 # Initialize disaster ingestion service
 disaster_service = DisasterService()
 
-
-def normalize_eonet(evt):
-    """
-    Normalize one raw NASA EONET event (v2.1 or v3 shape) into the dict served
-    by GET /api/disasters. Returns None when the event carries no usable
-    geometry/coordinates and must be skipped.
-
-    Version duality handled here (and only here — Issue #45):
-    - v3 uses "geometry", v2.1 uses "geometries" (either may be a list whose
-      last entry is the latest observation, or a single object).
-    - categories/sources entries are dicts in both versions; anything else is
-      stringified/ignored defensively.
-    Versioned fixtures live in AI/fixtures/eonet_v2.json and eonet_v3.json.
-    """
-    if not isinstance(evt, dict):
-        return None
-
-    # v3 uses "geometry", v2.1 uses "geometries"
-    geometries = evt.get("geometry") or evt.get("geometries")
-
-    if not geometries:
-        return None
-
-    # Get latest geometry
-    geom = geometries[-1] if isinstance(geometries, list) else geometries
-    if not isinstance(geom, dict):
-        return None
-
-    coords = geom.get("coordinates", [])
-    if len(coords) < 2:
-        return None
-
-    # Extract category
-    categories = evt.get("categories", [])
-    category = "unknown"
-    if categories and len(categories) > 0:
-        cat_obj = categories[0]
-        category = cat_obj.get("id") if isinstance(cat_obj, dict) else str(cat_obj)
-
-    # Extract source link
-    sources = evt.get("sources", [])
-    link = None
-    if sources and len(sources) > 0:
-        source_obj = sources[0]
-        link = source_obj.get("url") if isinstance(source_obj, dict) else None
-
-    return {
-        "id": evt.get("id"),
-        "title": evt.get("title"),
-        "description": evt.get("description", ""),
-        "category": category,
-        "lat": coords[1],
-        "lng": coords[0],
-        "date": geom.get("date"),
-        "link": link or evt.get("link")
-    }
-
 # Disasters proxy endpoint (bypasses mobile network restrictions)
 @app.get("/api/disasters/sources")
 async def get_disaster_sources():
@@ -316,101 +259,12 @@ async def get_disasters(
     (NASA EONET, GDACS, USGS Earthquakes, NASA FIRMS).
     Tolerates partial failures and returns cached/stale data on error.
     """
-    from datetime import datetime, timedelta
-    import urllib.request
-    import json
-    
-    global _disasters_cache
-    
-    # Check cache first (unless force refresh)
-    if not force_refresh and _disasters_cache["data"] is not None:
-        cache_age = (datetime.now() - _disasters_cache["timestamp"]).total_seconds()
-        if cache_age < _disasters_cache["ttl"]:
-            print(f"✅ Returning cached data ({int(cache_age)}s old)")
-            result = _disasters_cache["data"].copy()
-            result["cached"] = True
-            return result
-    
-    # Try multiple endpoints - v3 first (better data)
-    endpoints = [
-        # v3 API - Better, more detailed data
-        f"https://eonet.gsfc.nasa.gov/api/v3/events?status=open&limit={limit}",
-        # v2.1 API - Fallback
-        f"https://eonet.gsfc.nasa.gov/api/v2.1/events?status=open&limit={limit}&days={days}",
-        # v3 via CORS proxy
-        f"https://api.allorigins.win/raw?url=https://eonet.gsfc.nasa.gov/api/v3/events?status=open&limit={limit}",
-        # v2.1 via CORS proxy
-        f"https://api.allorigins.win/raw?url=https://eonet.gsfc.nasa.gov/api/v2.1/events?status=open&limit={limit}&days={days}",
-        # Another CORS proxy with v3
-        f"https://corsproxy.io/?https://eonet.gsfc.nasa.gov/api/v3/events?status=open&limit={limit}"
-    ]
-    
-    last_error = None
-    
-    for url in endpoints:
-        try:
-            print(f"📡 Trying: {url[:80]}...")
-            
-            req = urllib.request.Request(
-                url,
-                headers={
-                    'User-Agent': 'iAlert-DisasterMonitoring/1.0',
-                    'Accept': 'application/json'
-                }
-            )
-            
-            with urllib.request.urlopen(req, timeout=30) as response:
-                data = json.loads(response.read().decode())
-                
-                # Handle wrapped responses from proxies
-                if "contents" in data:
-                    data = json.loads(data["contents"])
-                
-                events = data.get("events", [])
-                
-                print(f"✅ Got {len(events)} events from {url[:40]}...")
-                
-                # Process events - single version-tolerant normalizer (Issue #45)
-                processed_events = []
-                for evt in events:
-                    normalized = normalize_eonet(evt)
-                    if normalized is not None:
-                        processed_events.append(normalized)
-                
-                result = {
-                    "status": "ok",
-                    "count": len(processed_events),
-                    "events": processed_events,
-                    "source": "eonet",
-                    "api_version": "v2.1" if "v2.1" in url else "v3",
-                    "cached": False
-                }
-                
-                # Cache the result
-                _disasters_cache["data"] = result
-                _disasters_cache["timestamp"] = datetime.now()
-                
-                print(f"✅ Returning {len(processed_events)} processed events")
-                return result
-                
-        except Exception as e:
-            last_error = str(e)
-            print(f"❌ Failed: {last_error}")
-            continue
-    
-    # All endpoints failed - return cache if available
-    if _disasters_cache["data"] is not None:
-        print(f"⚠️ All endpoints failed, returning stale cache")
-        result = _disasters_cache["data"].copy()
-        result["cached"] = True
-        cache_age = int((datetime.now() - _disasters_cache["timestamp"]).total_seconds())
-        result["cache_age_seconds"] = cache_age
-        return result
-    
-    # No cache and all endpoints failed
-    raise HTTPException(
-        status_code=503,
-        detail=f"Unable to fetch disasters from any source. Last error: {last_error}"
+    source_list = [s.strip() for s in sources.split(",")] if sources else None
+    result = disaster_service.fetch_all(
+        sources=source_list,
+        limit=limit,
+        days=days,
+        force_refresh=force_refresh,
     )
     if result.get("count", 0) == 0 and not result.get("sources"):
         raise HTTPException(
