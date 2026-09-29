@@ -12,6 +12,7 @@ from AI.disasters.base import (
 from AI.disasters.eonet import EONETFetcher, normalize_eonet
 from AI.disasters.firms import FIRMSFetcher, normalize_firms_row, parse_firms_csv
 from AI.disasters.gdacs import GDACSFetcher, normalize_gdacs
+from AI.disasters.service import DisasterService
 from AI.disasters.usgs import USGSFetcher, normalize_usgs
 
 __all__ = [
@@ -28,4 +29,5 @@ __all__ = [
     "normalize_gdacs",
     "USGSFetcher",
     "normalize_usgs",
+    "DisasterService",
 ]
