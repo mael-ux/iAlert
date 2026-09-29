@@ -1,18 +1,19 @@
 import React, { useState, useEffect } from "react";
-import { View, StyleSheet, ActivityIndicator, Modal, Text, TouchableOpacity, ScrollView } from "react-native";
+import { View, StyleSheet, ActivityIndicator, Modal, Text, TouchableOpacity, ScrollView, Platform } from "react-native";
 import { WebView } from "react-native-webview";
 import { useNavigation } from '@react-navigation/native';
 import { COLORS } from "../../constants/colors";
 import { Ionicons } from "@expo/vector-icons";
+import { AI_API_URL } from "../../constants/api";
 
-// Import AI_API_URL with fallback
-let AI_API_URL;
-try {
-  const imported = require("../../constants/ai-api");
-  AI_API_URL = imported.AI_API_URL;
-} catch (e) {
-  AI_API_URL = "https://ialert-ai-service.onrender.com/api";
-}
+// Source display names & colors for legend badges
+const SOURCE_INFO = {
+  eonet: { name: "NASA EONET", color: "#4285f4" },
+  gdacs: { name: "GDACS", color: "#ea4335" },
+  usgs: { name: "USGS", color: "#fbbc05" },
+  reliefweb: { name: "ReliefWeb", color: "#34a853" },
+  default: { name: "Unknown", color: "#9aa0a6" },
+};
 
 const DISASTER_INFO = {
   wildfires: { name: "Wildfire", color: "#ff4500", emoji: "🔥", icon: "flame" },
@@ -39,6 +40,7 @@ export default function GlobeMap({ style }) {
   const [disastersData, setDisastersData] = useState([]);
   const [legendVisible, setLegendVisible] = useState(true);
   const [disasterCounts, setDisasterCounts] = useState({});
+  const [sourceCounts, setSourceCounts] = useState({});
 
   // Hide tab bar on this screen
   useEffect(() => {
@@ -58,23 +60,33 @@ export default function GlobeMap({ style }) {
   const fetchDisasters = async () => {
     try {
       console.log('🌍 Fetching disasters from backend...');
-      const response = await fetch(`${AI_API_URL}/disasters`);
+      const endpoint = AI_API_URL.endsWith('/api') ? `${AI_API_URL}/disasters` : `${AI_API_URL}/api/disasters`;
+      const response = await fetch(endpoint);
       
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}`);
       }
       
       const data = await response.json();
-      console.log(`✅ Loaded ${data.count} disasters`);
+      console.log(`✅ Loaded ${data.count} disasters from ${data.sources?.join(', ') || 'unknown sources'}`);
+      
+      // Normalize events: ensure source field exists
+      const normalizedEvents = (data.events || []).map(evt => ({
+        ...evt,
+        source: evt.source || 'eonet',
+      }));
       
       const counts = {};
-      data.events.forEach(evt => {
+      const sourceCountsMap = {};
+      normalizedEvents.forEach(evt => {
         counts[evt.category] = (counts[evt.category] || 0) + 1;
+        sourceCountsMap[evt.source] = (sourceCountsMap[evt.source] || 0) + 1;
       });
       
-      setDisastersData(data.events);
+      setDisastersData(normalizedEvents);
       setDisasterCounts(counts);
-      buildGlobe(data.events);
+      setSourceCounts(sourceCountsMap);
+      buildGlobe(normalizedEvents);
       
     } catch (err) {
       console.error('❌ Failed to fetch disasters:', err);
@@ -278,10 +290,15 @@ export default function GlobeMap({ style }) {
               const intersects = raycaster.intersectObjects(markers);
 
               if (intersects.length > 0) {
-                window.ReactNativeWebView.postMessage(JSON.stringify({
+                const msg = JSON.stringify({
                   type: 'eventClick',
                   payload: intersects[0].object.userData
-                }));
+                });
+                if (window.ReactNativeWebView && window.ReactNativeWebView.postMessage) {
+                  window.ReactNativeWebView.postMessage(msg);
+                } else if (window.parent) {
+                  window.parent.postMessage(msg, '*');
+                }
               }
             };
 
@@ -309,6 +326,23 @@ export default function GlobeMap({ style }) {
     setHtmlContent(html);
     setLoading(false);
   };
+
+  // Web message listener for iframe interaction
+  useEffect(() => {
+    if (Platform.OS === 'web') {
+      const handleWebMsg = (e) => {
+        try {
+          const data = typeof e.data === 'string' ? JSON.parse(e.data) : e.data;
+          if (data && data.type === 'eventClick') {
+            setSelectedEvent(data.payload);
+            setModalVisible(true);
+          }
+        } catch (_) {}
+      };
+      window.addEventListener('message', handleWebMsg);
+      return () => window.removeEventListener('message', handleWebMsg);
+    }
+  }, []);
 
   const onMessage = (event) => {
     try {
@@ -343,15 +377,23 @@ export default function GlobeMap({ style }) {
 
   return (
     <View style={styles.container}>
-      <WebView
-        originWhitelist={['*']}
-        source={{ html: htmlContent }}
-        style={styles.webview}
-        javaScriptEnabled={true}
-        domStorageEnabled={true}
-        onMessage={onMessage}
-        scrollEnabled={false}
-      />
+      {Platform.OS === 'web' ? (
+        <iframe
+          title="3D Globe"
+          srcDoc={htmlContent}
+          style={{ width: '100%', height: '100%', border: 'none', backgroundColor: '#000' }}
+        />
+      ) : (
+        <WebView
+          originWhitelist={['*']}
+          source={{ html: htmlContent }}
+          style={styles.webview}
+          javaScriptEnabled={true}
+          domStorageEnabled={true}
+          onMessage={onMessage}
+          scrollEnabled={false}
+        />
+      )}
 
       {/* Legend Overlay - Moved to BOTTOM */}
       {legendVisible && (
@@ -362,6 +404,19 @@ export default function GlobeMap({ style }) {
               <Ionicons name="close-circle" size={24} color={COLORS.white} />
             </TouchableOpacity>
           </View>
+          
+          {/* Source badges */}
+          {Object.keys(sourceCounts).length > 0 && (
+            <View style={styles.sourceBadges}>
+              {Object.entries(sourceCounts).map(([source, count]) => (
+                <View key={source} style={[styles.sourceBadge, { backgroundColor: (SOURCE_INFO[source]?.color || SOURCE_INFO.default.color) + '20' }]}>
+                  <Text style={[styles.sourceBadgeText, { color: SOURCE_INFO[source]?.color || SOURCE_INFO.default.color }]}>
+                    {SOURCE_INFO[source]?.name || source}: {count}
+                  </Text>
+                </View>
+              ))}
+            </View>
+          )}
           
           <ScrollView 
             horizontal 
@@ -416,6 +471,13 @@ export default function GlobeMap({ style }) {
                 <View style={modalStyles.badge}>
                   <Text style={modalStyles.badgeText}>{selectedEvent?.categoryName}</Text>
                 </View>
+                {selectedEvent?.source && (
+                  <View style={[modalStyles.badge, { backgroundColor: (SOURCE_INFO[selectedEvent.source]?.color || SOURCE_INFO.default.color) + '15' }]}>
+                    <Text style={[modalStyles.badgeText, { color: SOURCE_INFO[selectedEvent.source]?.color || SOURCE_INFO.default.color }]}>
+                      {SOURCE_INFO[selectedEvent.source]?.name || selectedEvent.source}
+                    </Text>
+                  </View>
+                )}
                 <Text style={modalStyles.date}>
                   {selectedEvent?.date ? new Date(selectedEvent.date).toLocaleDateString() : ''}
                 </Text>
@@ -534,6 +596,24 @@ const styles = StyleSheet.create({
     color: 'rgba(255, 255, 255, 0.5)',
     textAlign: 'center',
     marginTop: 12,
+  },
+  sourceBadges: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    paddingHorizontal: 20,
+    marginBottom: 12,
+  },
+  sourceBadge: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.2)',
+  },
+  sourceBadgeText: {
+    fontSize: 11,
+    fontWeight: '600',
   },
   legendToggle: {
     position: 'absolute',

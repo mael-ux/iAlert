@@ -43,3 +43,11 @@ yarn-error.*
 backend/.env
 
 mobile/app/constants/api.js
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+
+# Local Pi runtime state
+.atl/

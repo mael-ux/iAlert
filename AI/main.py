@@ -17,6 +17,7 @@ from AI.chat_agent import (
     resolve_coords,
     run_chat_turn,
 )
+from AI.disasters import DisasterService, normalize_eonet
 
 # Initialize FastAPI app
 app = FastAPI(
@@ -234,12 +235,8 @@ async def chat(request: ChatRequest):
         tool_calls=[ToolCall(**tc) for tc in tool_calls] or None,
     )
 
-# Cache for EONET data (in-memory)
-_disasters_cache = {
-    "data": None,
-    "timestamp": None,
-    "ttl": 300  # 5 minutes cache
-}
+# Initialize disaster ingestion service
+disaster_service = DisasterService()
 
 
 def normalize_eonet(evt):
@@ -299,11 +296,25 @@ def normalize_eonet(evt):
     }
 
 # Disasters proxy endpoint (bypasses mobile network restrictions)
+@app.get("/api/disasters/sources")
+async def get_disaster_sources():
+    """List available real-time natural disaster data sources."""
+    return {
+        "sources": disaster_service.available_sources(),
+    }
+
+
 @app.get("/api/disasters")
-async def get_disasters(limit: int = 100, days: int = 30, force_refresh: bool = False):
+async def get_disasters(
+    limit: int = 150,
+    days: int = 30,
+    force_refresh: bool = False,
+    sources: Optional[str] = None,
+):
     """
-    Fetch active disasters from NASA EONET API
-    Tries multiple API versions and endpoints with fallbacks
+    Fetch active natural disasters from multiple authoritative global APIs
+    (NASA EONET, GDACS, USGS Earthquakes, NASA FIRMS).
+    Tolerates partial failures and returns cached/stale data on error.
     """
     from datetime import datetime, timedelta
     import urllib.request
@@ -401,6 +412,12 @@ async def get_disasters(limit: int = 100, days: int = 30, force_refresh: bool = 
         status_code=503,
         detail=f"Unable to fetch disasters from any source. Last error: {last_error}"
     )
+    if result.get("count", 0) == 0 and not result.get("sources"):
+        raise HTTPException(
+            status_code=503,
+            detail="Unable to fetch disasters from any source.",
+        )
+    return result
 
 # Error handlers
 @app.exception_handler(404)
