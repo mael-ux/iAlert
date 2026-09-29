@@ -1,0 +1,41 @@
+{
+  "type": "FeatureCollection",
+  "metadata": {
+    "generated": 1790642000000,
+    "url": "https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/2.5_day.geojson",
+    "title": "USGS Earthquakes",
+    "status": 200,
+    "api": "1.10.3",
+    "count": 1
+  },
+  "features": [
+    {
+      "type": "Feature",
+      "properties": {
+        "mag": 5.4,
+        "place": "120 km S of Tokyo, Japan",
+        "time": 1790636084809,
+        "updated": 1790641855751,
+        "tz": null,
+        "url": "https://earthquake.usgs.gov/earthquakes/eventpage/us6000test",
+        "detail": "https://earthquake.usgs.gov/earthquakes/feed/v1.0/detail/us6000test.geojson",
+        "felt": 120,
+        "alert": "yellow",
+        "status": "reviewed",
+        "tsunami": 0,
+        "sig": 450,
+        "type": "earthquake",
+        "title": "M 5.4 - 120 km S of Tokyo, Japan"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          139.75,
+          34.5,
+          10.0
+        ]
+      },
+      "id": "us6000test"
+    }
+  ]
+}
