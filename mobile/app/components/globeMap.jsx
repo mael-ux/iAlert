@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { View, StyleSheet, ActivityIndicator, Modal, Text, TouchableOpacity, ScrollView } from "react-native";
+import { View, StyleSheet, ActivityIndicator, Modal, Text, TouchableOpacity, ScrollView, Platform } from "react-native";
 import { WebView } from "react-native-webview";
 import { useNavigation } from '@react-navigation/native';
 import { COLORS } from "../../constants/colors";
@@ -290,10 +290,15 @@ export default function GlobeMap({ style }) {
               const intersects = raycaster.intersectObjects(markers);
 
               if (intersects.length > 0) {
-                window.ReactNativeWebView.postMessage(JSON.stringify({
+                const msg = JSON.stringify({
                   type: 'eventClick',
                   payload: intersects[0].object.userData
-                }));
+                });
+                if (window.ReactNativeWebView && window.ReactNativeWebView.postMessage) {
+                  window.ReactNativeWebView.postMessage(msg);
+                } else if (window.parent) {
+                  window.parent.postMessage(msg, '*');
+                }
               }
             };
 
@@ -321,6 +326,23 @@ export default function GlobeMap({ style }) {
     setHtmlContent(html);
     setLoading(false);
   };
+
+  // Web message listener for iframe interaction
+  useEffect(() => {
+    if (Platform.OS === 'web') {
+      const handleWebMsg = (e) => {
+        try {
+          const data = typeof e.data === 'string' ? JSON.parse(e.data) : e.data;
+          if (data && data.type === 'eventClick') {
+            setSelectedEvent(data.payload);
+            setModalVisible(true);
+          }
+        } catch (_) {}
+      };
+      window.addEventListener('message', handleWebMsg);
+      return () => window.removeEventListener('message', handleWebMsg);
+    }
+  }, []);
 
   const onMessage = (event) => {
     try {
@@ -355,15 +377,23 @@ export default function GlobeMap({ style }) {
 
   return (
     <View style={styles.container}>
-      <WebView
-        originWhitelist={['*']}
-        source={{ html: htmlContent }}
-        style={styles.webview}
-        javaScriptEnabled={true}
-        domStorageEnabled={true}
-        onMessage={onMessage}
-        scrollEnabled={false}
-      />
+      {Platform.OS === 'web' ? (
+        <iframe
+          title="3D Globe"
+          srcDoc={htmlContent}
+          style={{ width: '100%', height: '100%', border: 'none', backgroundColor: '#000' }}
+        />
+      ) : (
+        <WebView
+          originWhitelist={['*']}
+          source={{ html: htmlContent }}
+          style={styles.webview}
+          javaScriptEnabled={true}
+          domStorageEnabled={true}
+          onMessage={onMessage}
+          scrollEnabled={false}
+        />
+      )}
 
       {/* Legend Overlay - Moved to BOTTOM */}
       {legendVisible && (
