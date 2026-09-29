@@ -10,6 +10,7 @@ from AI.disasters.base import (
     validate_coords,
 )
 from AI.disasters.eonet import EONETFetcher, normalize_eonet
+from AI.disasters.firms import FIRMSFetcher, normalize_firms_row, parse_firms_csv
 from AI.disasters.gdacs import GDACSFetcher, normalize_gdacs
 from AI.disasters.usgs import USGSFetcher, normalize_usgs
 
@@ -20,6 +21,9 @@ __all__ = [
     "validate_coords",
     "EONETFetcher",
     "normalize_eonet",
+    "FIRMSFetcher",
+    "normalize_firms_row",
+    "parse_firms_csv",
     "GDACSFetcher",
     "normalize_gdacs",
     "USGSFetcher",
