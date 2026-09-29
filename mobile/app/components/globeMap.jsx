@@ -4,15 +4,7 @@ import { WebView } from "react-native-webview";
 import { useNavigation } from '@react-navigation/native';
 import { COLORS } from "../../constants/colors";
 import { Ionicons } from "@expo/vector-icons";
-
-// Import AI_API_URL with fallback
-let AI_API_URL;
-try {
-  const imported = require("../../constants/ai-api");
-  AI_API_URL = imported.AI_API_URL;
-} catch (e) {
-  AI_API_URL = "https://ialert-ai-service.onrender.com/api";
-}
+import { AI_API_URL } from "../../constants/api";
 
 // Source display names & colors for legend badges
 const SOURCE_INFO = {
@@ -68,7 +60,8 @@ export default function GlobeMap({ style }) {
   const fetchDisasters = async () => {
     try {
       console.log('🌍 Fetching disasters from backend...');
-      const response = await fetch(`${AI_API_URL}/disasters`);
+      const endpoint = AI_API_URL.endsWith('/api') ? `${AI_API_URL}/disasters` : `${AI_API_URL}/api/disasters`;
+      const response = await fetch(endpoint);
       
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}`);
