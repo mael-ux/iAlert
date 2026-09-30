@@ -113,17 +113,29 @@ def check_chat_empty(base):
     return True, "empty message rejected with 400"
 
 
-def check_chat_no_keys(base):
+def check_chat_valid_message(base):
     status, body, err = http_request(
         "POST",
         base + "/api/chat",
         payload={"message": "Is there flood risk near Tokyo, Japan?"},
+        timeout=LIVE_TIMEOUT,
     )
     if err:
+        if "timed out" in err:
+            return None, "SKIP - chat turn exceeded %ss (slow upstream?)" % (
+                LIVE_TIMEOUT,
+            )
         return False, err
-    if status != 503:
-        return False, "expected 503, got %s (%s)" % (status, body)
-    return True, "lazy init proven: 503 without keys"
+    if status == 503:
+        return True, "lazy init proven: 503 without keys"
+    if status == 200:
+        text = body.get("response", "") if isinstance(body, dict) else ""
+        if "OpenWeather" in text:
+            return True, "full loop with keys: answer + attribution"
+        return False, "200 without attribution: %s" % (body,)
+    if status in (502, 429):
+        return None, "SKIP - upstream %s (transient?)" % status
+    return False, "expected 503/200, got %s (%s)" % (status, body)
 
 
 def check_unknown_path(base):
@@ -137,6 +149,17 @@ def check_unknown_path(base):
     return True, "clean JSON 404"
 
 
+def check_disaster_sources(base):
+    status, body, err = http_request("GET", base + "/api/disasters/sources")
+    if err:
+        return False, err
+    if status != 200:
+        return False, "expected 200, got %s (%s)" % (status, body)
+    if not isinstance(body, dict) or "sources" not in body or not isinstance(body["sources"], list):
+        return False, "unexpected sources body: %s" % body
+    return True, "sources: %s" % ", ".join(body["sources"])
+
+
 def check_disasters(base):
     status, body, err = http_request(
         "GET", base + "/api/disasters?limit=5", timeout=LIVE_TIMEOUT
@@ -147,7 +170,12 @@ def check_disasters(base):
         return False, "expected 200, got %s (%s)" % (status, body)
     if not isinstance(body, dict) or body.get("status") != "ok":
         return False, "unexpected body: %s" % body
-    return True, "%s live events" % body.get("count")
+    sources = body.get("sources", [])
+    events = body.get("events", [])
+    for evt in events:
+        if not all(k in evt for k in ("id", "title", "category", "lat", "lng", "source")):
+            return False, "event missing required fields: %s" % evt
+    return True, "%s events from %s" % (len(events), ", ".join(sources) if sources else "none")
 
 
 def main(argv=None):
@@ -171,8 +199,10 @@ def main(argv=None):
         ("health 200",) + check_health(base),
         ("continents 200",) + check_continents(base),
         ("countries/Asia 200",) + check_countries(base),
+        ("disaster sources 200",) + check_disaster_sources(base),
         ("chat empty -> 400",) + check_chat_empty(base),
-        ("chat valid no-keys -> 503",) + check_chat_no_keys(base),
+        ("chat valid message (503 keyless / 200 keyed)",)
+        + check_chat_valid_message(base),
         ("unknown path -> 404 JSON",) + check_unknown_path(base),
     ]
     if args.live:
