@@ -20,7 +20,8 @@
         },
         "NSLocationWhenInUseUsageDescription": "We need your location to show you the current weather.",
         "NSLocationAlwaysUsageDescription": "Allow $(PRODUCT_NAME) to use your location."
-      }
+      },
+      "bundleIdentifier": "com.anahiramirez.ialert"
     },
     "android": {
       "adaptiveIcon": {
@@ -35,7 +36,10 @@
         "android.permission.ACCESS_COARSE_LOCATION",
         "android.permission.ACCESS_FINE_LOCATION",
         "android.permission.CAMERA",
-        "android.permission.RECORD_AUDIO"
+        "android.permission.RECORD_AUDIO",
+        "android.permission.MODIFY_AUDIO_SETTINGS",
+        "android.permission.FOREGROUND_SERVICE",
+        "android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK"
       ],
       "package": "com.anahiramirez.ialert"
     },
