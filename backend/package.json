@@ -5,7 +5,8 @@
   "main": "src/server.js",
   "scripts": {
     "dev": "nodemon src/server.js",
-    "start": "node src/server.js"
+    "start": "node src/server.js",
+    "test": "DATABASE_URL=postgresql://user:pass@localhost:5432/db node test_incidents.js"
   },
   "keywords": [],
   "author": "",
