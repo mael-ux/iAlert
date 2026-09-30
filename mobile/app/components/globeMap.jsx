@@ -59,48 +59,7 @@ export default function GlobeMap({ style }) {
         parent.setOptions({ tabBarStyle: undefined });
       };
     }
-  }, []);
-
-  useEffect(() => {
-    fetchDisasters();
-  }, []);
-
-  const fetchDisasters = async () => {
-    try {
-      console.log('🌍 Fetching disasters from backend...');
-      const endpoint = AI_API_URL.endsWith('/api') ? `${AI_API_URL}/disasters` : `${AI_API_URL}/api/disasters`;
-      const response = await fetch(endpoint);
-      
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}`);
-      }
-      
-      const data = await response.json();
-      console.log(`✅ Loaded ${data.count} disasters from ${data.sources?.join(', ') || 'unknown sources'}`);
-      
-      // Normalize events: ensure source field exists
-      const normalizedEvents = (data.events || []).map(evt => ({
-        ...evt,
-        source: evt.source || 'eonet',
-      }));
-      
-      const counts = {};
-      const sourceCountsMap = {};
-      normalizedEvents.forEach(evt => {
-        counts[evt.category] = (counts[evt.category] || 0) + 1;
-        sourceCountsMap[evt.source] = (sourceCountsMap[evt.source] || 0) + 1;
-      });
-      
-      setDisastersData(normalizedEvents);
-      setDisasterCounts(counts);
-      setSourceCounts(sourceCountsMap);
-      buildGlobe(normalizedEvents);
-      
-    } catch (err) {
-      console.error('❌ Failed to fetch disasters:', err);
-      buildGlobe([]);
-    }
-  };
+  }, [navigation]);
 
   const buildGlobe = (events) => {
     const html = `
@@ -335,6 +294,54 @@ export default function GlobeMap({ style }) {
     setLoading(false);
   };
 
+  useEffect(() => {
+    let isMounted = true;
+    async function loadDisasters() {
+      try {
+        console.log('🌍 Fetching disasters from backend...');
+        const endpoint = AI_API_URL.endsWith('/api') ? `${AI_API_URL}/disasters` : `${AI_API_URL}/api/disasters`;
+        const response = await fetch(endpoint);
+        
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}`);
+        }
+        
+        const data = await response.json();
+        console.log(`✅ Loaded ${data.count} disasters from ${data.sources?.join(', ') || 'unknown sources'}`);
+        
+        // Normalize events: ensure source field exists
+        const normalizedEvents = (data.events || []).map(evt => ({
+          ...evt,
+          source: evt.source || 'eonet',
+        }));
+        
+        const counts = {};
+        const sourceCountsMap = {};
+        normalizedEvents.forEach(evt => {
+          counts[evt.category] = (counts[evt.category] || 0) + 1;
+          sourceCountsMap[evt.source] = (sourceCountsMap[evt.source] || 0) + 1;
+        });
+        
+        if (isMounted) {
+          setDisastersData(normalizedEvents);
+          setDisasterCounts(counts);
+          setSourceCounts(sourceCountsMap);
+          buildGlobe(normalizedEvents);
+        }
+      } catch (err) {
+        console.error('❌ Failed to fetch disasters:', err);
+        if (isMounted) {
+          buildGlobe([]);
+        }
+      }
+    }
+
+    loadDisasters();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
   // Web message listener for iframe interaction
   useEffect(() => {
     if (Platform.OS === 'web') {
@@ -359,31 +366,24 @@ export default function GlobeMap({ style }) {
         setSelectedEvent(data.payload);
         setModalVisible(true);
       }
-    } catch (err) {
+    } catch (_err) {
       // ignore
     }
   };
 
-  if (loading || !htmlContent) {
-    return (
-      <View style={[styles.container, styles.centerLoader]}>
-        <ActivityIndicator size="large" color={COLORS.primary} />
-        <Text style={styles.loadingText}>Loading satellite data...</Text>
-      </View>
-    );
-  }
+  // Get top disaster types for legend (computed unconditionally before any early return)
+  const topDisasters = useMemo(() => {
+    return Object.entries(disasterCounts)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 6)
+      .map(([category, count]) => ({
+        ...DISASTER_INFO[category],
+        category,
+        count,
+      }));
+  }, [disasterCounts]);
 
-  // Get top disaster types for legend
-  const topDisasters = Object.entries(disasterCounts)
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 6)
-    .map(([category, count]) => ({
-      ...DISASTER_INFO[category],
-      category,
-      count
-    }));
-
-  // Corroborating sources within ~200km radius
+  // Corroborating sources within ~200km radius (computed unconditionally before any early return)
   const corroboratingSources = useMemo(() => {
     if (!selectedEvent || !disastersData.length) return [];
     const toRad = (x) => (x * Math.PI) / 180;
@@ -411,6 +411,15 @@ export default function GlobeMap({ style }) {
       }))
       .slice(0, 3);
   }, [selectedEvent, disastersData]);
+
+  if (loading || !htmlContent) {
+    return (
+      <View style={[styles.container, styles.centerLoader]}>
+        <ActivityIndicator size="large" color={COLORS.primary} />
+        <Text style={styles.loadingText}>Loading satellite data...</Text>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container}>
