@@ -157,6 +157,36 @@ app.get("/api/interestZone/:userId", async (req, res) => {
 //    PHOTO OF THE DAY
 // =========================
 app.get("/api/photoOfTheDay", async (req, res) => {
+  // Try the live NASA APOD feed first; fall back to the static DB table
+  // (originally seeded because APOD was taken offline) if it's unavailable.
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 5000);
+    const apodRes = await fetch(
+      `https://api.nasa.gov/planetary/apod?api_key=${ENV.NASA_API_KEY}`,
+      { signal: controller.signal }
+    );
+    clearTimeout(timeout);
+
+    if (apodRes.ok) {
+      const apod = await apodRes.json();
+      if (apod.media_type === "image") {
+        console.log(`✅ Live APOD: ${apod.title}`);
+        return res.status(200).json({
+          title: apod.title,
+          image: apod.hdurl || apod.url,
+          url: apod.hdurl || apod.url,
+          description: apod.explanation || "",
+          credits: apod.copyright ? `NASA, ${apod.copyright}` : "NASA",
+        });
+      }
+      // media_type "video" (rare) — fall through to the DB table instead
+    }
+    console.warn(`⚠️ NASA APOD returned ${apodRes.status}, falling back to DB`);
+  } catch (err) {
+    console.warn(`⚠️ NASA APOD unreachable (${err.message}), falling back to DB`);
+  }
+
   try {
     console.log("📸 Fetching random photo from database...");
     

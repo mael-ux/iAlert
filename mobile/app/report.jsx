@@ -15,8 +15,9 @@ import { Ionicons } from "@expo/vector-icons";
 import * as Location from "expo-location";
 import * as ImagePicker from "expo-image-picker";
 import { useAuth, useUser } from "@clerk/clerk-expo";
-import { useTheme } from "../ThemeContext";
-import { API_URL } from "../../constants/api";
+import { useTheme } from "./ThemeContext";
+import { useRouter } from "expo-router";
+import { API_URL } from "../constants/api";
 
 const CATEGORIES = [
   { id: "wildfires", name: "Wildfire", icon: "flame", color: "#ff4500" },
@@ -44,6 +45,7 @@ export default function ReportDisasterScreen() {
   const [photos, setPhotos] = useState([]);
   const [submitting, setSubmitting] = useState(false);
   const [successMessage, setSuccessMessage] = useState(null);
+  const router = useRouter();
 
   // Automatically request GPS location on mount
   useEffect(() => {
@@ -175,6 +177,7 @@ export default function ReportDisasterScreen() {
 
       if (Platform.OS !== "web") {
         Alert.alert("Report Submitted", msg);
+        
       }
     } catch (err) {
       console.error("Submit error:", err);
@@ -189,6 +192,10 @@ export default function ReportDisasterScreen() {
       style={[styles.container, { backgroundColor: theme.background }]}
       contentContainerStyle={styles.content}
     >
+      <TouchableOpacity onPress={() => router.back()} style={{ marginBottom: 12 }}>
+  <Ionicons name="arrow-back" size={24} color={theme.text} />
+</TouchableOpacity>
+
       <View style={styles.header}>
         <Ionicons name="megaphone" size={32} color={theme.primary} />
         <Text style={[styles.headerTitle, { color: theme.text }]}>Report a Disaster</Text>
