@@ -16,6 +16,7 @@ import { healthCheckJob, photoJob } from "./config/cron.js";
 
 // Import alerts router if it exists
 // import alertsRouter from "./routes/alerts.routes.js";
+import { incidentsRouter, reportsRouter } from "./routes/incidents.routes.js";
 
 import fetch from "node-fetch";
 
@@ -331,6 +332,12 @@ app.post("/api/get-weather", async (req, res) => {
 // =========================
 // Uncomment if you have alerts routes
 // app.use("/api/alerts", alertsRouter);
+
+// =========================
+//    INCIDENTS & REPORTS ROUTERS
+// =========================
+app.use("/api/incidents", incidentsRouter);
+app.use("/api/reports", reportsRouter);
 
 // =========================
 //    AI PREDICTION (Optional - for production, this should be removed or secured)
