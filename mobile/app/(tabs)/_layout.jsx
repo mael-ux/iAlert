@@ -63,6 +63,15 @@ export default function TabsLayout() {
         }}
       />
       <Tabs.Screen
+        name="report"
+        options={{
+          title: "Report",
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="megaphone-outline" size={size} color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
         name="chatbot"
         options={{
           title: "Chat Bot",
