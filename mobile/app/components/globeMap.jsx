@@ -1,8 +1,7 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { View, StyleSheet, ActivityIndicator, Modal, Text, TouchableOpacity, ScrollView, Platform } from "react-native";
 import { WebView } from "react-native-webview";
-import { useNavigation } from '@react-navigation/native';
-import { useRouter } from 'expo-router';
+import { useNavigation, useRouter } from 'expo-router';
 import { COLORS } from "../../constants/colors";
 import { Ionicons } from "@expo/vector-icons";
 import { AI_API_URL } from "../../constants/api";
