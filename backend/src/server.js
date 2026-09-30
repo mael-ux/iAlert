@@ -14,8 +14,7 @@ import { healthCheckJob, photoJob } from "./config/cron.js";
 // Import the new EONET cron if it exists
 // import { eonetCheckJob } from './config/eonetCron.js';
 
-// Import alerts router if it exists
-// import alertsRouter from "./routes/alerts.routes.js";
+import alertsRouter from "./routes/alerts.routes.js";
 import { incidentsRouter, reportsRouter } from "./routes/incidents.routes.js";
 
 import fetch from "node-fetch";
@@ -332,8 +331,7 @@ app.post("/api/get-weather", async (req, res) => {
 // =========================
 //    ALERTS ROUTER
 // =========================
-// Uncomment if you have alerts routes
-// app.use("/api/alerts", alertsRouter);
+app.use("/api/alerts", alertsRouter);
 
 // =========================
 //    INCIDENTS & REPORTS ROUTERS
