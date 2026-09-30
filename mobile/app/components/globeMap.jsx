@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { View, StyleSheet, ActivityIndicator, Modal, Text, TouchableOpacity, ScrollView, Platform } from "react-native";
 import { WebView } from "react-native-webview";
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useRouter } from 'expo-router';
 import { COLORS } from "../../constants/colors";
 import { Ionicons } from "@expo/vector-icons";
 import { AI_API_URL } from "../../constants/api";
@@ -13,6 +13,13 @@ const SOURCE_INFO = {
   usgs: { name: "USGS", color: "#fbbc05" },
   reliefweb: { name: "ReliefWeb", color: "#34a853" },
   default: { name: "Unknown", color: "#9aa0a6" },
+};
+
+const SEVERITY_THEMES = {
+  critical: { bg: "#ffebee", text: "#c62828", border: "#ef5350" },
+  high: { bg: "#fff3e0", text: "#e65100", border: "#ffb74d" },
+  medium: { bg: "#fffde7", text: "#f57f17", border: "#fff59d" },
+  low: { bg: "#e8f5e9", text: "#2e7d32", border: "#a5d6a7" },
 };
 
 const DISASTER_INFO = {
@@ -33,6 +40,7 @@ const DISASTER_INFO = {
 
 export default function GlobeMap({ style }) {
   const navigation = useNavigation();
+  const router = useRouter();
   const [htmlContent, setHtmlContent] = useState(null);
   const [loading, setLoading] = useState(true);
   const [modalVisible, setModalVisible] = useState(false);
@@ -51,48 +59,7 @@ export default function GlobeMap({ style }) {
         parent.setOptions({ tabBarStyle: undefined });
       };
     }
-  }, []);
-
-  useEffect(() => {
-    fetchDisasters();
-  }, []);
-
-  const fetchDisasters = async () => {
-    try {
-      console.log('🌍 Fetching disasters from backend...');
-      const endpoint = AI_API_URL.endsWith('/api') ? `${AI_API_URL}/disasters` : `${AI_API_URL}/api/disasters`;
-      const response = await fetch(endpoint);
-      
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}`);
-      }
-      
-      const data = await response.json();
-      console.log(`✅ Loaded ${data.count} disasters from ${data.sources?.join(', ') || 'unknown sources'}`);
-      
-      // Normalize events: ensure source field exists
-      const normalizedEvents = (data.events || []).map(evt => ({
-        ...evt,
-        source: evt.source || 'eonet',
-      }));
-      
-      const counts = {};
-      const sourceCountsMap = {};
-      normalizedEvents.forEach(evt => {
-        counts[evt.category] = (counts[evt.category] || 0) + 1;
-        sourceCountsMap[evt.source] = (sourceCountsMap[evt.source] || 0) + 1;
-      });
-      
-      setDisastersData(normalizedEvents);
-      setDisasterCounts(counts);
-      setSourceCounts(sourceCountsMap);
-      buildGlobe(normalizedEvents);
-      
-    } catch (err) {
-      console.error('❌ Failed to fetch disasters:', err);
-      buildGlobe([]);
-    }
-  };
+  }, [navigation]);
 
   const buildGlobe = (events) => {
     const html = `
@@ -327,6 +294,54 @@ export default function GlobeMap({ style }) {
     setLoading(false);
   };
 
+  useEffect(() => {
+    let isMounted = true;
+    async function loadDisasters() {
+      try {
+        console.log('🌍 Fetching disasters from backend...');
+        const endpoint = AI_API_URL.endsWith('/api') ? `${AI_API_URL}/disasters` : `${AI_API_URL}/api/disasters`;
+        const response = await fetch(endpoint);
+        
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}`);
+        }
+        
+        const data = await response.json();
+        console.log(`✅ Loaded ${data.count} disasters from ${data.sources?.join(', ') || 'unknown sources'}`);
+        
+        // Normalize events: ensure source field exists
+        const normalizedEvents = (data.events || []).map(evt => ({
+          ...evt,
+          source: evt.source || 'eonet',
+        }));
+        
+        const counts = {};
+        const sourceCountsMap = {};
+        normalizedEvents.forEach(evt => {
+          counts[evt.category] = (counts[evt.category] || 0) + 1;
+          sourceCountsMap[evt.source] = (sourceCountsMap[evt.source] || 0) + 1;
+        });
+        
+        if (isMounted) {
+          setDisastersData(normalizedEvents);
+          setDisasterCounts(counts);
+          setSourceCounts(sourceCountsMap);
+          buildGlobe(normalizedEvents);
+        }
+      } catch (err) {
+        console.error('❌ Failed to fetch disasters:', err);
+        if (isMounted) {
+          buildGlobe([]);
+        }
+      }
+    }
+
+    loadDisasters();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
   // Web message listener for iframe interaction
   useEffect(() => {
     if (Platform.OS === 'web') {
@@ -351,10 +366,51 @@ export default function GlobeMap({ style }) {
         setSelectedEvent(data.payload);
         setModalVisible(true);
       }
-    } catch (err) {
+    } catch (_err) {
       // ignore
     }
   };
+
+  // Get top disaster types for legend (computed unconditionally before any early return)
+  const topDisasters = useMemo(() => {
+    return Object.entries(disasterCounts)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 6)
+      .map(([category, count]) => ({
+        ...DISASTER_INFO[category],
+        category,
+        count,
+      }));
+  }, [disasterCounts]);
+
+  // Corroborating sources within ~200km radius (computed unconditionally before any early return)
+  const corroboratingSources = useMemo(() => {
+    if (!selectedEvent || !disastersData.length) return [];
+    const toRad = (x) => (x * Math.PI) / 180;
+    const distKm = (lat1, lon1, lat2, lon2) => {
+      const R = 6371;
+      const dLat = toRad(lat2 - lat1);
+      const dLon = toRad(lon2 - lon1);
+      const a =
+        Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+        Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
+      return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    };
+
+    return disastersData
+      .filter((other) => {
+        if (other.id === selectedEvent.id) return false;
+        const d = distKm(selectedEvent.lat, selectedEvent.lng, other.lat, other.lng);
+        return d <= 200;
+      })
+      .map((other) => ({
+        ...other,
+        distanceKm: Math.round(
+          distKm(selectedEvent.lat, selectedEvent.lng, other.lat, other.lng)
+        ),
+      }))
+      .slice(0, 3);
+  }, [selectedEvent, disastersData]);
 
   if (loading || !htmlContent) {
     return (
@@ -364,16 +420,6 @@ export default function GlobeMap({ style }) {
       </View>
     );
   }
-
-  // Get top disaster types for legend
-  const topDisasters = Object.entries(disasterCounts)
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 6)
-    .map(([category, count]) => ({
-      ...DISASTER_INFO[category],
-      category,
-      count
-    }));
 
   return (
     <View style={styles.container}>
@@ -469,7 +515,7 @@ export default function GlobeMap({ style }) {
               
               <View style={modalStyles.metaRow}>
                 <View style={modalStyles.badge}>
-                  <Text style={modalStyles.badgeText}>{selectedEvent?.categoryName}</Text>
+                  <Text style={modalStyles.badgeText}>{selectedEvent?.categoryName || selectedEvent?.category}</Text>
                 </View>
                 {selectedEvent?.source && (
                   <View style={[modalStyles.badge, { backgroundColor: (SOURCE_INFO[selectedEvent.source]?.color || SOURCE_INFO.default.color) + '15' }]}>
@@ -478,14 +524,30 @@ export default function GlobeMap({ style }) {
                     </Text>
                   </View>
                 )}
+                {selectedEvent?.severity && (
+                  <View style={[modalStyles.badge, { backgroundColor: SEVERITY_THEMES[selectedEvent.severity]?.bg || '#eee' }]}>
+                    <Text style={[modalStyles.badgeText, { color: SEVERITY_THEMES[selectedEvent.severity]?.text || '#333' }]}>
+                      {selectedEvent.severity.toUpperCase()}
+                    </Text>
+                  </View>
+                )}
                 <Text style={modalStyles.date}>
                   {selectedEvent?.date ? new Date(selectedEvent.date).toLocaleDateString() : ''}
                 </Text>
               </View>
 
-              {selectedEvent?.description && (
-                <Text style={modalStyles.description}>{selectedEvent.description}</Text>
+              {selectedEvent?.magnitude != null && (
+                <View style={modalStyles.infoSection}>
+                  <Ionicons name="speedometer-outline" size={18} color={COLORS.primary} />
+                  <Text style={modalStyles.infoText}>
+                    Telemetry Magnitude / Intensity: {selectedEvent.magnitude}
+                  </Text>
+                </View>
               )}
+
+              {selectedEvent?.description ? (
+                <Text style={modalStyles.description}>{selectedEvent.description}</Text>
+              ) : null}
 
               <View style={modalStyles.infoSection}>
                 <Ionicons name="location" size={20} color={COLORS.primary} />
@@ -493,6 +555,40 @@ export default function GlobeMap({ style }) {
                   {selectedEvent?.lat?.toFixed(4)}°, {selectedEvent?.lng?.toFixed(4)}°
                 </Text>
               </View>
+
+              {/* Corroborating sources */}
+              {corroboratingSources.length > 0 && (
+                <View style={modalStyles.corroborationContainer}>
+                  <Text style={modalStyles.corroborationHeading}>
+                    Corroborating Telemetry ({corroboratingSources.length} nearby)
+                  </Text>
+                  {corroboratingSources.map((c) => (
+                    <View key={c.id} style={modalStyles.corroborationItem}>
+                      <View style={modalStyles.corroborationTop}>
+                        <View style={[modalStyles.badge, { backgroundColor: (SOURCE_INFO[c.source]?.color || SOURCE_INFO.default.color) + '18' }]}>
+                          <Text style={[modalStyles.badgeText, { color: SOURCE_INFO[c.source]?.color || SOURCE_INFO.default.color }]}>
+                            {SOURCE_INFO[c.source]?.name || c.source}
+                          </Text>
+                        </View>
+                        <Text style={modalStyles.distanceText}>{c.distanceKm} km away</Text>
+                      </View>
+                      <Text style={modalStyles.corroborationTitle} numberOfLines={1}>{c.title}</Text>
+                    </View>
+                  ))}
+                </View>
+              )}
+
+              {/* Citizen Reporting CTA */}
+              <TouchableOpacity
+                style={modalStyles.reportCtaBtn}
+                onPress={() => {
+                  setModalVisible(false);
+                  router.push("/(tabs)/report");
+                }}
+              >
+                <Ionicons name="megaphone-outline" size={18} color={COLORS.primary} />
+                <Text style={modalStyles.reportCtaText}>Report Observations for this Zone</Text>
+              </TouchableOpacity>
 
               {selectedEvent?.link && (
                 <TouchableOpacity 
@@ -503,7 +599,7 @@ export default function GlobeMap({ style }) {
                   }}
                 >
                   <Ionicons name="open-outline" size={20} color={COLORS.white} />
-                  <Text style={modalStyles.linkText}>View Source</Text>
+                  <Text style={modalStyles.linkText}>View Official Source</Text>
                 </TouchableOpacity>
               )}
             </ScrollView>
@@ -724,5 +820,58 @@ const modalStyles = StyleSheet.create({
     color: COLORS.white,
     fontSize: 16,
     fontWeight: '600',
+  },
+  corroborationContainer: {
+    marginTop: 4,
+    marginBottom: 16,
+    padding: 12,
+    backgroundColor: '#f5f7fa',
+    borderRadius: 12,
+    gap: 8,
+  },
+  corroborationHeading: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: COLORS.text,
+    marginBottom: 4,
+  },
+  corroborationItem: {
+    backgroundColor: '#ffffff',
+    padding: 10,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#e8eaed',
+    gap: 4,
+  },
+  corroborationTop: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  distanceText: {
+    fontSize: 11,
+    color: COLORS.textLight,
+  },
+  corroborationTitle: {
+    fontSize: 12,
+    color: COLORS.text,
+    fontWeight: '500',
+  },
+  reportCtaBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    padding: 14,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    borderColor: COLORS.primary,
+    backgroundColor: COLORS.primary + '0d',
+    marginBottom: 12,
+  },
+  reportCtaText: {
+    color: COLORS.primary,
+    fontSize: 14,
+    fontWeight: '700',
   },
 });
