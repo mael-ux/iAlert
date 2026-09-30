@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Image, Switch } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Image, Switch, Alert } from 'react-native';
 import { useAuth, useUser } from '@clerk/clerk-expo';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router'; 
@@ -21,6 +21,34 @@ export default function UserScreen() {
       console.error('Error signing out:', err);
     }
   };
+
+  const handleDeleteAccount = () => {
+  Alert.alert(
+    isEnglish ? "Delete Account" : "Eliminar Cuenta",
+    isEnglish
+      ? "This will permanently delete your account and all your data. This cannot be undone."
+      : "Esto eliminará permanentemente tu cuenta y todos tus datos. Esta acción no se puede deshacer.",
+    [
+      { text: isEnglish ? "Cancel" : "Cancelar", style: "cancel" },
+      {
+        text: isEnglish ? "Delete" : "Eliminar",
+        style: "destructive",
+        onPress: async () => {
+          try {
+            await user.delete();
+            router.replace("/sign-in");
+          } catch (err) {
+            console.error("Error deleting account:", err);
+            Alert.alert(
+              isEnglish ? "Error" : "Error",
+              isEnglish ? "Could not delete account. Please try again." : "No se pudo eliminar la cuenta. Intenta de nuevo."
+            );
+          }
+        },
+      },
+    ]
+  );
+};
 
   const toggleLanguage = () => {
     setIsEnglish(prev => !prev);
@@ -160,6 +188,17 @@ export default function UserScreen() {
         </TouchableOpacity>
         
         {/* Espacio extra al final */}
+        <TouchableOpacity
+  style={[styles.button, styles.signOutButton, { backgroundColor: theme.card, borderColor: "#dc3545", marginTop: 10 }]}
+  onPress={handleDeleteAccount}
+>
+  <View style={[styles.buttonContent, { justifyContent: 'center' }]}>
+    <Ionicons name="trash-outline" size={24} color="#dc3545" />
+    <Text style={[styles.buttonText, { color: "#dc3545", flex: 0, marginLeft: 8 }]}>
+      {isEnglish ? "Delete Account" : "Eliminar Cuenta"}
+    </Text>
+  </View>
+</TouchableOpacity>
         <View style={{ height: 40 }} />
       </ScrollView>
     </View>

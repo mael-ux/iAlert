@@ -38,6 +38,8 @@ if (!ENV.API_URL) {
   console.error("⚠️  CRITICAL: API_URL is not set! Health checks will fail.");
 }
 
+NASA_API_KEY: process.env.NASA_API_KEY || "DEMO_KEY",
+
 console.log("✓ Environment configuration loaded");
 console.log(`  - NODE_ENV: ${ENV.NODE_ENV}`);
 console.log(`  - PORT: ${ENV.PORT}`);
