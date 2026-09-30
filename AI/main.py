@@ -10,6 +10,13 @@ from pydantic import BaseModel
 from typing import Dict, List, Literal, Optional
 import os
 
+try:
+    from dotenv import load_dotenv
+    load_dotenv(os.path.join(os.path.dirname(__file__), ".env"))
+    load_dotenv()
+except ImportError:
+    pass
+
 from AI.chat_agent import (
     ChatError,
     RateLimitedError,
