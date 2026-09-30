@@ -1,13 +1,11 @@
 # FastAPI and server dependencies
 fastapi==0.115.5
 uvicorn[standard]==0.32.1
-pydantic==2.10.3
-
-# Machine Learning
-scikit-learn==1.7.2
-pandas==2.2.3
-numpy==2.2.1
-joblib==1.4.2
+pydantic==2.12.5
 
 # CORS support
 python-multipart==0.0.20
+
+# GenAI chatbot (google-genai SDK + httpx for free-endpoint tool calls)
+google-genai==2.23.0
+httpx==0.28.1

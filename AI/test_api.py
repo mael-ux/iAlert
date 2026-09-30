@@ -1,148 +1,241 @@
 """
-Test script for iAlert AI Service
-Run this locally to verify everything works before deploying to Render
+iAlert AI Service - manual smoke script (standard library only).
+
+Usage:
+    python AI/test_api.py [--base-url http://localhost:8000] [--live]
+
+Probes the deterministic live surface without any API keys and prints a
+summary table. Exit code 0 when every executed check passes, 1 otherwise.
+The network-dependent EONET /api/disasters check only runs with --live
+(default: skipped).
+
+The server must already be running, e.g.:
+    uvicorn AI.main:app --port 8000
 """
 
-import requests
+import argparse
 import json
+import sys
+import urllib.error
+import urllib.request
 
-# Change this to your Render URL after deployment
-# For local testing: http://localhost:8000
-BASE_URL = "http://localhost:8000"
+DEFAULT_BASE_URL = "http://localhost:8000"
+DEFAULT_TIMEOUT = 10
+LIVE_TIMEOUT = 60
 
-def test_health_check():
-    """Test the health check endpoint"""
-    print("\n🔍 Testing Health Check...")
+KNOWN_CONTINENT = "Asia"
+KNOWN_COUNTRY = "Japan"
+
+
+def _parse_json(raw):
     try:
-        response = requests.get(f"{BASE_URL}/api/health")
-        print(f"Status: {response.status_code}")
-        print(f"Response: {json.dumps(response.json(), indent=2)}")
-        return response.status_code == 200
-    except Exception as e:
-        print(f"❌ Error: {e}")
-        return False
+        return json.loads(raw)
+    except (ValueError, TypeError):
+        return None
 
-def test_get_continents():
-    """Test getting list of continents"""
-    print("\n🌍 Testing Get Continents...")
+
+def http_request(method, url, payload=None, timeout=DEFAULT_TIMEOUT):
+    """Return (status_code or None, parsed JSON body or None, error or None)."""
+    data = None
+    headers = {"Accept": "application/json"}
+    if payload is not None:
+        data = json.dumps(payload).encode("utf-8")
+        headers["Content-Type"] = "application/json"
+    req = urllib.request.Request(url, data=data, headers=headers, method=method)
     try:
-        response = requests.get(f"{BASE_URL}/api/continents")
-        print(f"Status: {response.status_code}")
-        data = response.json()
-        print(f"Continents: {data['continents']}")
-        return response.status_code == 200
-    except Exception as e:
-        print(f"❌ Error: {e}")
-        return False
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            return resp.status, _parse_json(resp.read().decode("utf-8")), None
+    except urllib.error.HTTPError as exc:
+        raw = exc.read().decode("utf-8", errors="replace")
+        return exc.code, _parse_json(raw), None
+    except urllib.error.URLError as exc:
+        return None, None, "connection failed: %s" % exc.reason
+    except Exception as exc:  # e.g. TimeoutError
+        return None, None, "request failed: %s" % exc
 
-def test_get_countries(continent="Asia"):
-    """Test getting countries for a continent"""
-    print(f"\n🗺️  Testing Get Countries for {continent}...")
-    try:
-        response = requests.get(f"{BASE_URL}/api/countries/{continent}")
-        print(f"Status: {response.status_code}")
-        data = response.json()
-        print(f"Countries: {data['countries'][:5]}... ({len(data['countries'])} total)")
-        return response.status_code == 200
-    except Exception as e:
-        print(f"❌ Error: {e}")
-        return False
 
-def test_predict_disaster(region="Asia", country="Japan"):
-    """Test disaster prediction"""
-    print(f"\n🔮 Testing Disaster Prediction for {country}, {region}...")
-    try:
-        response = requests.post(
-            f"{BASE_URL}/api/predict-disaster",
-            json={"region": region, "country": country}
-        )
-        print(f"Status: {response.status_code}")
-        data = response.json()
-        
-        if data.get("status") == "ok":
-            print(f"✅ Predictions for {data['country']}, {data['region']}:")
-            # Show top 5 predictions
-            predictions = sorted(
-                data['predictions'].items(), 
-                key=lambda x: x[1], 
-                reverse=True
-            )[:5]
-            
-            for disaster, prob in predictions:
-                print(f"  • {disaster}: {prob*100:.2f}%")
-            
-            return True
-        else:
-            print(f"❌ Unexpected response: {data}")
-            return False
-            
-    except Exception as e:
-        print(f"❌ Error: {e}")
-        return False
+def check_root(base):
+    status, body, err = http_request("GET", base + "/")
+    if err:
+        return False, err
+    if status != 200:
+        return False, "expected 200, got %s" % status
+    if not isinstance(body, dict) or body.get("status") != "online":
+        return False, "unexpected body: %s" % body
+    return True, "service online"
 
-def test_model_info():
-    """Test getting model information"""
-    print("\n📊 Testing Model Info...")
-    try:
-        response = requests.get(f"{BASE_URL}/api/model-info")
-        print(f"Status: {response.status_code}")
-        data = response.json()
-        print(f"Disaster Types: {len(data['disaster_types'])} types")
-        print(f"Sample types: {data['disaster_types'][:5]}...")
-        return response.status_code == 200
-    except Exception as e:
-        print(f"❌ Error: {e}")
-        return False
 
-def run_all_tests():
-    """Run all tests"""
-    print("=" * 60)
-    print("🧪 iAlert AI Service - API Tests")
-    print("=" * 60)
-    
-    tests = [
-        ("Health Check", test_health_check),
-        ("Get Continents", test_get_continents),
-        ("Get Countries", lambda: test_get_countries("Asia")),
-        ("Predict Disaster", lambda: test_predict_disaster("Asia", "Japan")),
-        ("Model Info", test_model_info),
+def check_health(base):
+    status, body, err = http_request("GET", base + "/api/health")
+    if err:
+        return False, err
+    if status != 200:
+        return False, "expected 200, got %s" % status
+    if not isinstance(body, dict) or body.get("status") != "healthy":
+        return False, "unexpected body: %s" % body
+    return True, "status=healthy"
+
+
+def check_continents(base):
+    status, body, err = http_request("GET", base + "/api/continents")
+    if err:
+        return False, err
+    if status != 200:
+        return False, "expected 200, got %s" % status
+    continents = body.get("continents") if isinstance(body, dict) else None
+    if not isinstance(continents, list) or KNOWN_CONTINENT not in continents:
+        return False, "missing %r in %s" % (KNOWN_CONTINENT, body)
+    return True, "%d continents, %s present" % (len(continents), KNOWN_CONTINENT)
+
+
+def check_countries(base):
+    status, body, err = http_request(
+        "GET", base + "/api/countries/%s" % KNOWN_CONTINENT
+    )
+    if err:
+        return False, err
+    if status != 200:
+        return False, "expected 200, got %s" % status
+    countries = body.get("countries") if isinstance(body, dict) else None
+    if not isinstance(countries, list) or KNOWN_COUNTRY not in countries:
+        return False, "missing %r in response" % KNOWN_COUNTRY
+    return True, "%d countries, %s present" % (len(countries), KNOWN_COUNTRY)
+
+
+def check_chat_empty(base):
+    status, body, err = http_request(
+        "POST", base + "/api/chat", payload={"message": ""}
+    )
+    if err:
+        return False, err
+    if status != 400:
+        return False, "expected 400, got %s (%s)" % (status, body)
+    return True, "empty message rejected with 400"
+
+
+def check_chat_valid_message(base):
+    status, body, err = http_request(
+        "POST",
+        base + "/api/chat",
+        payload={"message": "Is there flood risk near Tokyo, Japan?"},
+        timeout=LIVE_TIMEOUT,
+    )
+    if err:
+        if "timed out" in err:
+            return None, "SKIP - chat turn exceeded %ss (slow upstream?)" % (
+                LIVE_TIMEOUT,
+            )
+        return False, err
+    if status == 503:
+        return True, "lazy init proven: 503 without keys"
+    if status == 200:
+        text = body.get("response", "") if isinstance(body, dict) else ""
+        if "OpenWeather" in text:
+            return True, "full loop with keys: answer + attribution"
+        return False, "200 without attribution: %s" % (body,)
+    if status in (502, 429):
+        return None, "SKIP - upstream %s (transient?)" % status
+    return False, "expected 503/200, got %s (%s)" % (status, body)
+
+
+def check_unknown_path(base):
+    status, body, err = http_request("GET", base + "/api/does-not-exist-41")
+    if err:
+        return False, err
+    if status != 404:
+        return False, "expected 404, got %s (%s)" % (status, body)
+    if not isinstance(body, dict) or "error" not in body:
+        return False, "expected JSON error body, got %s" % body
+    return True, "clean JSON 404"
+
+
+def check_disaster_sources(base):
+    status, body, err = http_request("GET", base + "/api/disasters/sources")
+    if err:
+        return False, err
+    if status != 200:
+        return False, "expected 200, got %s (%s)" % (status, body)
+    if not isinstance(body, dict) or "sources" not in body or not isinstance(body["sources"], list):
+        return False, "unexpected sources body: %s" % body
+    return True, "sources: %s" % ", ".join(body["sources"])
+
+
+def check_disasters(base):
+    status, body, err = http_request(
+        "GET", base + "/api/disasters?limit=5", timeout=LIVE_TIMEOUT
+    )
+    if err:
+        return False, err
+    if status != 200:
+        return False, "expected 200, got %s (%s)" % (status, body)
+    if not isinstance(body, dict) or body.get("status") != "ok":
+        return False, "unexpected body: %s" % body
+    sources = body.get("sources", [])
+    events = body.get("events", [])
+    for evt in events:
+        if not all(k in evt for k in ("id", "title", "category", "lat", "lng", "source")):
+            return False, "event missing required fields: %s" % evt
+    return True, "%s events from %s" % (len(events), ", ".join(sources) if sources else "none")
+
+
+def main(argv=None):
+    parser = argparse.ArgumentParser(
+        description="Manual stdlib-only smoke check for the iAlert AI service."
+    )
+    parser.add_argument("--base-url", default=DEFAULT_BASE_URL)
+    parser.add_argument(
+        "--live",
+        action="store_true",
+        help="include the network-dependent EONET /api/disasters check",
+    )
+    args = parser.parse_args(argv)
+    base = args.base_url.rstrip("/")
+
+    print("iAlert AI Service - smoke check against %s" % base)
+    print("-" * 70)
+
+    results = [
+        ("root 200",) + check_root(base),
+        ("health 200",) + check_health(base),
+        ("continents 200",) + check_continents(base),
+        ("countries/Asia 200",) + check_countries(base),
+        ("disaster sources 200",) + check_disaster_sources(base),
+        ("chat empty -> 400",) + check_chat_empty(base),
+        ("chat valid message (503 keyless / 200 keyed)",)
+        + check_chat_valid_message(base),
+        ("unknown path -> 404 JSON",) + check_unknown_path(base),
     ]
-    
-    results = []
-    for name, test_func in tests:
-        try:
-            success = test_func()
-            results.append((name, success))
-        except Exception as e:
-            print(f"❌ {name} failed with exception: {e}")
-            results.append((name, False))
-    
-    # Summary
-    print("\n" + "=" * 60)
-    print("📋 Test Summary")
-    print("=" * 60)
-    
-    for name, success in results:
-        status = "✅ PASS" if success else "❌ FAIL"
-        print(f"{status} - {name}")
-    
-    passed = sum(1 for _, success in results if success)
-    total = len(results)
-    
-    print(f"\nTotal: {passed}/{total} tests passed")
-    
-    if passed == total:
-        print("\n🎉 All tests passed! Your API is ready to deploy! 🚀")
+    if args.live:
+        results.append(("disasters live",) + check_disasters(base))
     else:
-        print("\n⚠️  Some tests failed. Please fix the issues before deploying.")
-    
-    return passed == total
+        results.append(("disasters live", None, "skipped (use --live)"))
+
+    width = max(len(name) for name, _, _ in results)
+    passed = failed = skipped = 0
+    for name, ok, detail in results:
+        if ok is None:
+            outcome = "SKIP"
+            skipped += 1
+        elif ok:
+            outcome = "PASS"
+            passed += 1
+        else:
+            outcome = "FAIL"
+            failed += 1
+        print("%-*s  %-4s  %s" % (width, name, outcome, detail))
+
+    print("-" * 70)
+    print("Total: %d passed, %d failed, %d skipped" % (passed, failed, skipped))
+    if any(
+        detail.startswith("connection failed")
+        for _, ok, detail in results
+        if ok is False
+    ):
+        print("Hint: is the server running? Start it with:")
+        print("    uvicorn AI.main:app --port 8000")
+
+    return 0 if failed == 0 else 1
+
 
 if __name__ == "__main__":
-    print("\n💡 Make sure your server is running first:")
-    print("   uvicorn AI.main:app --reload --port 8000\n")
-    
-    input("Press Enter to start tests...")
-    
-    success = run_all_tests()
-    exit(0 if success else 1)
+    sys.exit(main())

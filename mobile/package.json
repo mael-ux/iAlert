@@ -5,10 +5,11 @@
   "scripts": {
     "start": "expo start",
     "reset-project": "node ./scripts/reset-project.js",
-    "android": "expo start --android",
-    "ios": "expo start --ios",
+    "android": "expo run:android",
+    "ios": "expo run:ios",
     "web": "expo start --web",
-    "lint": "expo lint"
+    "lint": "expo lint",
+    "test": "tsc --noEmit"
   },
   "dependencies": {
     "@clerk/clerk-expo": "^2.19.1",
@@ -19,6 +20,7 @@
     "@react-navigation/bottom-tabs": "^7.4.0",
     "@react-navigation/elements": "^2.6.3",
     "@react-navigation/native": "^7.1.8",
+<<<<<<< HEAD
     "expo": "~57.0.25",
     "expo-asset": "~57.0.18",
     "expo-audio": "~57.0.5",
@@ -26,10 +28,23 @@
     "expo-av": "~16.0.7",
     "expo-camera": "~57.0.5",
     "expo-constants": "~57.0.19",
+=======
+    "expo": "^57.0.25",
+    "expo-asset": "~57.0.18",
+    "expo-audio": "~57.0.5",
+    "expo-auth-session": "~57.0.13",
+    "expo-camera": "~57.0.5",
+    "expo-constants": "~57.0.19",
+    "expo-dev-client": "~57.0.19",
+>>>>>>> 5b58cbe967d0ab5456a28150d80d27abfea8c49f
     "expo-file-system": "~57.0.7",
     "expo-font": "~57.0.4",
     "expo-haptics": "~57.0.3",
     "expo-image": "~57.0.5",
+<<<<<<< HEAD
+=======
+    "expo-image-picker": "~57.0.20",
+>>>>>>> 5b58cbe967d0ab5456a28150d80d27abfea8c49f
     "expo-linking": "~57.0.11",
     "expo-location": "~57.0.20",
     "expo-notifications": "~57.0.21",

@@ -1,0 +1,11 @@
+{
+  "id": "EONET_001",
+  "title": "Wildfire - California (v2 fixture)",
+  "description": "Minimal EONET v2.1-shaped event for normalize_eonet (Issue #45).",
+  "categories": [{ "id": "wildfires", "title": "Wildfires" }],
+  "sources": [{ "id": "PDC", "url": "https://example.com/eonet-v2-source" }],
+  "geometries": [
+    { "date": "2026-09-18T00:00:00Z", "type": "Point", "coordinates": [-120.5, 38.2] },
+    { "date": "2026-09-19T00:00:00Z", "type": "Point", "coordinates": [-120.4, 38.3] }
+  ]
+}

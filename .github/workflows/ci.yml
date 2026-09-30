@@ -1,0 +1,59 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test-ai:
+    name: AI Service Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r AI/requirements.txt python-dotenv
+      - name: Run AI unit & offline test suites
+        run: |
+          python AI/test_disasters.py
+          python AI/test_chat.py
+
+  test-backend:
+    name: Backend API Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: "npm"
+          cache-dependency-path: backend/package-lock.json
+      - name: Install dependencies
+        run: cd backend && npm ci
+      - name: Run backend tests
+        run: cd backend && npm test
+
+  test-mobile:
+    name: Mobile Typecheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: "npm"
+          cache-dependency-path: mobile/package-lock.json
+      - name: Install dependencies
+        run: cd mobile && npm ci
+      - name: Typecheck TypeScript
+        run: cd mobile && npm test

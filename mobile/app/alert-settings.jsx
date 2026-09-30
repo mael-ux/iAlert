@@ -1,5 +1,5 @@
 // mobile/app/alert-settings.jsx
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   View, Text, StyleSheet, Switch, ScrollView, 
   TouchableOpacity, ActivityIndicator, Alert,
@@ -17,6 +17,7 @@ import * as Notifications from 'expo-notifications';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { createAudioPlayer } from 'expo-audio';
 import * as Location from 'expo-location';
+
 
 // Configure notification behavior
 Notifications.setNotificationHandler({
@@ -41,14 +42,15 @@ export default function AlertSettingsScreen() {
   const { user } = useUser();
   const router = useRouter();
   const { theme } = useTheme();
+  const audioPlayer = useAudioPlayer(
+    require('../assets/sounds/alert.mp3')
+  );
   
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
-  const [sound, setSound] = useState(null);
   const [isAlarmPlaying, setIsAlarmPlaying] = useState(false);
   const [flashEnabled, setFlashEnabled] = useState(false);
   
-  const soundRef = useRef(null);
   const [permission, requestPermission] = useCameraPermissions();
 
   const [config, setConfig] = useState({
@@ -182,7 +184,13 @@ const stopAlarm = async () => {
         'No se pudo reproducir el sonido. Verifica que "alert.mp3" exista en assets/sounds.'
       );
     }
-  };
+
+    Alert.alert(
+      'Error',
+      'No se pudo reproducir el sonido. Verifica que "alert.mp3" exista en assets/sounds.'
+    );
+  }
+};
 
   const testAlert = async () => {
     try {
@@ -519,7 +527,7 @@ const stopAlarm = async () => {
       )}
     </SafeAreaWrapper>
   );
-}
+
 
 const styles = StyleSheet.create({
   container: { flex: 1 },

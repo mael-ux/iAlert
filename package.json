@@ -1,4 +1,13 @@
 {
+  "name": "ialert",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "test:ai": "python3 AI/test_disasters.py && python3 AI/test_chat.py",
+    "test:backend": "cd backend && DATABASE_URL=postgresql://user:pass@localhost:5432/db node test_incidents.js",
+    "test:mobile": "cd mobile && npx tsc --noEmit",
+    "test": "npm run test:ai && npm run test:backend && npm run test:mobile"
+  },
   "dependencies": {
     "@react-native-async-storage/async-storage": "^2.2.0",
     "@react-native-community/slider": "5.0.1",

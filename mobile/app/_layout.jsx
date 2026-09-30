@@ -3,7 +3,7 @@ import { ClerkProvider, SignedIn, SignedOut } from "@clerk/clerk-expo";
 import { Slot, useRouter } from "expo-router";
 import * as SecureStore from "expo-secure-store";
 import { ThemeProvider } from "./ThemeContext";
-// import { useAlertPolling } from "./hooks/useAlertPolling";
+import { useAlertPolling } from "./hooks/useAlertPolling";
 
 const CLERK_PUBLISHABLE_KEY = process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY;
 
@@ -27,10 +27,8 @@ const tokenCache = {
 function InitialLayout() {
   const router = useRouter();
   
-  // ⚠️ ALERT POLLING TEMPORARILY DISABLED
-  // Reason: Backend /api/alerts/check-new endpoint doesn't exist yet
-  // Will re-enable after implementing database user sync
-  // useAlertPolling();
+  // Real-time disaster alerts polling
+  useAlertPolling();
 
   return <Slot />;
 }

@@ -14,21 +14,26 @@ import { healthCheckJob, photoJob } from "./config/cron.js";
 // Import the new EONET cron if it exists
 // import { eonetCheckJob } from './config/eonetCron.js';
 
-// Import alerts router if it exists
-// import alertsRouter from "./routes/alerts.routes.js";
+import alertsRouter from "./routes/alerts.routes.js";
+import { incidentsRouter, reportsRouter } from "./routes/incidents.routes.js";
 
 import fetch from "node-fetch";
+import cors from "cors";
 
 const app = express();
 
+app.use(cors());
 app.use("/api/webhooks", express.raw({ type: "application/json" }), webhooksRouter);
 app.use(express.json());
 
-const PORT = ENV.PORT || 8001;
+// 5001 is the canonical backend port (agrees with env.js default and README).
+const PORT = ENV.PORT || 5001;
 
-// FIXED: Start cron jobs in production
-if (ENV.NODE_ENV === "production") {
-  console.log("Starting cron jobs in production mode...");
+// Cron jobs (self health-ping keep-alive + photo cleanup) run when KEEP_ALIVE is set.
+// KEEP_ALIVE defaults to true in production and false otherwise, so production
+// behavior is unchanged; staging/preview can opt in with KEEP_ALIVE=true.
+if (ENV.KEEP_ALIVE) {
+  console.log("Starting cron jobs (KEEP_ALIVE enabled)...");
   healthCheckJob.start();
   photoJob.start();
   // eonetCheckJob.start(); // Uncomment if you have this
@@ -79,9 +84,16 @@ app.get("/api/search-city", async (req, res) => {
 // =========================
 app.post("/api/interestZone", async (req, res) => {
   try {
-    const { userId, title, latitude, longitude } = req.body;
+    const { userId, latitude, longitude } = req.body;
+    // Issue #45: title is NOT NULL in the DB (default 'Untitled zone').
+    // Normalize at the boundary instead of rejecting: blank/missing titles
+    // fall back so the insert can never violate the constraint.
+    const title =
+      typeof req.body.title === "string" && req.body.title.trim()
+        ? req.body.title.trim()
+        : "Untitled zone";
 
-    if (!userId || !title || latitude === undefined || longitude === undefined) {
+    if (!userId || latitude === undefined || longitude === undefined) {
       return res.status(400).json({ error: "Missing required fields" });
     }
 
@@ -145,6 +157,36 @@ app.get("/api/interestZone/:userId", async (req, res) => {
 //    PHOTO OF THE DAY
 // =========================
 app.get("/api/photoOfTheDay", async (req, res) => {
+  // Try the live NASA APOD feed first; fall back to the static DB table
+  // (originally seeded because APOD was taken offline) if it's unavailable.
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 5000);
+    const apodRes = await fetch(
+      `https://api.nasa.gov/planetary/apod?api_key=${ENV.NASA_API_KEY}`,
+      { signal: controller.signal }
+    );
+    clearTimeout(timeout);
+
+    if (apodRes.ok) {
+      const apod = await apodRes.json();
+      if (apod.media_type === "image") {
+        console.log(`✅ Live APOD: ${apod.title}`);
+        return res.status(200).json({
+          title: apod.title,
+          image: apod.hdurl || apod.url,
+          url: apod.hdurl || apod.url,
+          description: apod.explanation || "",
+          credits: apod.copyright ? `NASA, ${apod.copyright}` : "NASA",
+        });
+      }
+      // media_type "video" (rare) — fall through to the DB table instead
+    }
+    console.warn(`⚠️ NASA APOD returned ${apodRes.status}, falling back to DB`);
+  } catch (err) {
+    console.warn(`⚠️ NASA APOD unreachable (${err.message}), falling back to DB`);
+  }
+
   try {
     console.log("📸 Fetching random photo from database...");
     
@@ -160,6 +202,10 @@ app.get("/api/photoOfTheDay", async (req, res) => {
       return res.status(200).json({
         title: "Horsehead Nebula",
         image: "https://apod.nasa.gov/apod/image/2301/Horsehead_Hubble_1225.jpg",
+        // DEPRECATED alias for `image`: kept so older mobile clients that read
+        // `url` keep working without a coordinated app release. New code must
+        // use `image` (the DB column name, Issue #45).
+        url: "https://apod.nasa.gov/apod/image/2301/Horsehead_Hubble_1225.jpg",
         description: "The Horsehead Nebula is one of the most identifiable nebulae in the sky.",
         credits: "NASA, ESA, Hubble Heritage Team",
       });
@@ -170,6 +216,8 @@ app.get("/api/photoOfTheDay", async (req, res) => {
     res.status(200).json({
       title: randomPhoto.title,
       image: randomPhoto.image,
+      // DEPRECATED alias for `image` (see above, Issue #45).
+      url: randomPhoto.image,
       description: randomPhoto.description || "",
       credits: randomPhoto.credits || "",
     });
@@ -181,6 +229,8 @@ app.get("/api/photoOfTheDay", async (req, res) => {
     res.status(200).json({
       title: "Horsehead Nebula",
       image: "https://apod.nasa.gov/apod/image/2301/Horsehead_Hubble_1225.jpg",
+      // DEPRECATED alias for `image` (Issue #45, see above).
+      url: "https://apod.nasa.gov/apod/image/2301/Horsehead_Hubble_1225.jpg",
       description: "The Horsehead Nebula is one of the most identifiable nebulae in the sky.",
       credits: "NASA, ESA, Hubble Heritage Team",
     });
@@ -205,11 +255,16 @@ app.get("/api/photos", async (req, res) => {
 
     console.log(`✅ Found ${allPhotos.length} photos`);
     
-    // Map to match frontend expectations (url instead of image)
+    // Issue #45: canonical photo field is `image` (the DB column name, also
+    // used by GET /api/photoOfTheDay and mobile/app/index.jsx). `url` is kept
+    // as a DEPRECATED alias because mobile/app/Nasa.jsx reads `item.url` /
+    // `selectedPhoto.url` — removing it would break the gallery without a
+    // coordinated app release. New code must use `image`.
     const photos = allPhotos.map(photo => ({
       id: photo.id,
       title: photo.title,
-      url: photo.image,  // Map 'image' column to 'url' for frontend
+      image: photo.image,
+      url: photo.image,  // DEPRECATED alias for `image` (see above).
       description: photo.description || "",
       credits: photo.credits || "",
       date: photo.date
@@ -306,8 +361,13 @@ app.post("/api/get-weather", async (req, res) => {
 // =========================
 //    ALERTS ROUTER
 // =========================
-// Uncomment if you have alerts routes
-// app.use("/api/alerts", alertsRouter);
+app.use("/api/alerts", alertsRouter);
+
+// =========================
+//    INCIDENTS & REPORTS ROUTERS
+// =========================
+app.use("/api/incidents", incidentsRouter);
+app.use("/api/reports", reportsRouter);
 
 // =========================
 //    AI PREDICTION (Optional - for production, this should be removed or secured)

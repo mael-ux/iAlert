@@ -1,20 +1,35 @@
 """
-iAlert - FastAPI Server for Disaster Predictions
-Handles chatbot and ML model predictions
+iAlert - FastAPI Server for GenAI chatbot and disaster data
+Handles chatbot and country/disaster-data endpoints
 """
 
-from fastapi import FastAPI, HTTPException
+from fastapi import Depends, FastAPI, Header, HTTPException
+from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-import joblib
-import pandas as pd
-from typing import Dict, List
+from typing import Dict, List, Literal, Optional
 import os
+
+try:
+    from dotenv import load_dotenv
+    load_dotenv(os.path.join(os.path.dirname(__file__), ".env"))
+    load_dotenv()
+except ImportError:
+    pass
+
+from AI.chat_agent import (
+    ChatError,
+    RateLimitedError,
+    get_or_create_session,
+    resolve_coords,
+    run_chat_turn,
+)
+from AI.disasters import DisasterService, normalize_eonet
 
 # Initialize FastAPI app
 app = FastAPI(
     title="iAlert AI Service",
-    description="Disaster prediction and chatbot API",
+    description="GenAI chatbot and disaster-data API",
     version="1.0.0"
 )
 
@@ -27,101 +42,93 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Global variables for model and data
-modelo = None
-codificador = None
+# Global variables for data
 countries_by_continent = {}
 
 # Pydantic models for request/response validation
-class PredictionRequest(BaseModel):
-    region: str
-    country: str
+# GenAI chatbot models (POST /api/chat)
+class ToolCall(BaseModel):
+    name: str
+    args: Dict
+    cached: bool = False
 
-class PredictionResponse(BaseModel):
-    status: str
-    region: str
-    country: str
-    predictions: Dict[str, float]
+class ChatRequest(BaseModel):
+    message: str
+    session_id: Optional[str] = None
+    lat: Optional[float] = None
+    lon: Optional[float] = None
+    units: Literal["metric", "imperial"] = "metric"
 
-# Load model and prepare data on startup
+class ChatResponse(BaseModel):
+    response: str
+    session_id: str
+    tool_calls: Optional[List[ToolCall]] = None
+
+# Prepare static country data on startup
 @app.on_event("startup")
 async def load_model_and_data():
-    """Load the trained model and prepare country data"""
-    global modelo, codificador, countries_by_continent
-    
-    try:
-        # Load the trained model files
-        modelo = joblib.load("modelo_desastres.pkl")
-        codificador = joblib.load("codificador_labels.pkl")
+    """Prepare static country data"""
+    global countries_by_continent
+
+    # Static list of countries by continent
+    countries_by_continent = {
+        "Asia": [
+            "Afghanistan", "Armenia", "Azerbaijan", "Bangladesh", "Bhutan",
+            "Brunei", "Cambodia", "China", "Georgia", "India", "Indonesia",
+            "Iran", "Iraq", "Israel", "Japan", "Jordan", "Kazakhstan",
+            "Korea", "Kuwait", "Kyrgyzstan", "Laos", "Lebanon", "Malaysia",
+            "Maldives", "Mongolia", "Myanmar", "Nepal", "Oman", "Pakistan",
+            "Palestine", "Philippines", "Qatar", "Russia", "Saudi Arabia",
+            "Singapore", "Sri Lanka", "Syria", "Taiwan", "Tajikistan",
+            "Thailand", "Turkey", "Turkmenistan", "United Arab Emirates",
+            "Uzbekistan", "Vietnam", "Yemen"
+        ],
+        "Europe": [
+            "Albania", "Andorra", "Austria", "Belarus", "Belgium",
+            "Bosnia And Herzegovina", "Bulgaria", "Croatia", "Cyprus",
+            "Czechia", "Denmark", "Estonia", "Finland", "France",
+            "Germany", "Greece", "Hungary", "Iceland", "Ireland",
+            "Italy", "Kosovo", "Latvia", "Liechtenstein", "Lithuania",
+            "Luxembourg", "Malta", "Moldova", "Monaco", "Montenegro",
+            "Netherlands", "North Macedonia", "Norway", "Poland",
+            "Portugal", "Romania", "Russia", "San Marino", "Serbia",
+            "Slovakia", "Slovenia", "Spain", "Sweden", "Switzerland",
+            "Ukraine", "United Kingdom", "Vatican"
+        ],
+        "Africa": [
+            "Algeria", "Angola", "Benin", "Botswana", "Burkina Faso",
+            "Burundi", "Cameroon", "Cape Verde", "Central African Republic",
+            "Chad", "Comoros", "Congo", "Djibouti", "Egypt",
+            "Equatorial Guinea", "Eritrea", "Eswatini", "Ethiopia",
+            "Gabon", "Gambia", "Ghana", "Guinea", "Guinea-Bissau",
+            "Ivory Coast", "Kenya", "Lesotho", "Liberia", "Libya",
+            "Madagascar", "Malawi", "Mali", "Mauritania", "Mauritius",
+            "Morocco", "Mozambique", "Namibia", "Niger", "Nigeria",
+            "Rwanda", "Sao Tome And Principe", "Senegal", "Seychelles",
+            "Sierra Leone", "Somalia", "South Africa", "South Sudan",
+            "Sudan", "Tanzania", "Togo", "Tunisia", "Uganda",
+            "Zambia", "Zimbabwe"
+        ],
+        "America": [
+            "Antigua And Barbuda", "Argentina", "Bahamas", "Barbados",
+            "Belize", "Bolivia", "Brazil", "Canada", "Chile", "Colombia",
+            "Costa Rica", "Cuba", "Dominica", "Dominican Republic",
+            "Ecuador", "El Salvador", "Grenada", "Guatemala", "Guyana",
+            "Haiti", "Honduras", "Jamaica", "Mexico", "Nicaragua",
+            "Panama", "Paraguay", "Peru", "Saint Kitts And Nevis",
+            "Saint Lucia", "Saint Vincent And The Grenadines",
+            "Suriname", "Trinidad And Tobago", "United States",
+            "Uruguay", "Venezuela"
+        ],
+        "Oceania": [
+            "Australia", "Fiji", "Kiribati", "Marshall Islands",
+            "Micronesia", "Nauru", "New Zealand", "Palau",
+            "Papua New Guinea", "Samoa", "Solomon Islands", "Tonga",
+            "Tuvalu", "Vanuatu"
+        ]
+    }
         
-        print("✅ Model loaded successfully!")
-        
-        # Prepare countries by continent
-        # This is extracted from your training data
-        countries_by_continent = {
-            "Asia": [
-                "Afghanistan", "Armenia", "Azerbaijan", "Bangladesh", "Bhutan",
-                "Brunei", "Cambodia", "China", "Georgia", "India", "Indonesia",
-                "Iran", "Iraq", "Israel", "Japan", "Jordan", "Kazakhstan",
-                "Korea", "Kuwait", "Kyrgyzstan", "Laos", "Lebanon", "Malaysia",
-                "Maldives", "Mongolia", "Myanmar", "Nepal", "Oman", "Pakistan",
-                "Palestine", "Philippines", "Qatar", "Russia", "Saudi Arabia",
-                "Singapore", "Sri Lanka", "Syria", "Taiwan", "Tajikistan",
-                "Thailand", "Turkey", "Turkmenistan", "United Arab Emirates",
-                "Uzbekistan", "Vietnam", "Yemen"
-            ],
-            "Europe": [
-                "Albania", "Andorra", "Austria", "Belarus", "Belgium",
-                "Bosnia And Herzegovina", "Bulgaria", "Croatia", "Cyprus",
-                "Czechia", "Denmark", "Estonia", "Finland", "France",
-                "Germany", "Greece", "Hungary", "Iceland", "Ireland",
-                "Italy", "Kosovo", "Latvia", "Liechtenstein", "Lithuania",
-                "Luxembourg", "Malta", "Moldova", "Monaco", "Montenegro",
-                "Netherlands", "North Macedonia", "Norway", "Poland",
-                "Portugal", "Romania", "Russia", "San Marino", "Serbia",
-                "Slovakia", "Slovenia", "Spain", "Sweden", "Switzerland",
-                "Ukraine", "United Kingdom", "Vatican"
-            ],
-            "Africa": [
-                "Algeria", "Angola", "Benin", "Botswana", "Burkina Faso",
-                "Burundi", "Cameroon", "Cape Verde", "Central African Republic",
-                "Chad", "Comoros", "Congo", "Djibouti", "Egypt",
-                "Equatorial Guinea", "Eritrea", "Eswatini", "Ethiopia",
-                "Gabon", "Gambia", "Ghana", "Guinea", "Guinea-Bissau",
-                "Ivory Coast", "Kenya", "Lesotho", "Liberia", "Libya",
-                "Madagascar", "Malawi", "Mali", "Mauritania", "Mauritius",
-                "Morocco", "Mozambique", "Namibia", "Niger", "Nigeria",
-                "Rwanda", "Sao Tome And Principe", "Senegal", "Seychelles",
-                "Sierra Leone", "Somalia", "South Africa", "South Sudan",
-                "Sudan", "Tanzania", "Togo", "Tunisia", "Uganda",
-                "Zambia", "Zimbabwe"
-            ],
-            "America": [
-                "Antigua And Barbuda", "Argentina", "Bahamas", "Barbados",
-                "Belize", "Bolivia", "Brazil", "Canada", "Chile", "Colombia",
-                "Costa Rica", "Cuba", "Dominica", "Dominican Republic",
-                "Ecuador", "El Salvador", "Grenada", "Guatemala", "Guyana",
-                "Haiti", "Honduras", "Jamaica", "Mexico", "Nicaragua",
-                "Panama", "Paraguay", "Peru", "Saint Kitts And Nevis",
-                "Saint Lucia", "Saint Vincent And The Grenadines",
-                "Suriname", "Trinidad And Tobago", "United States",
-                "Uruguay", "Venezuela"
-            ],
-            "Oceania": [
-                "Australia", "Fiji", "Kiribati", "Marshall Islands",
-                "Micronesia", "Nauru", "New Zealand", "Palau",
-                "Papua New Guinea", "Samoa", "Solomon Islands", "Tonga",
-                "Tuvalu", "Vanuatu"
-            ]
-        }
-        
-        print(f"✅ Loaded {sum(len(v) for v in countries_by_continent.values())} countries across {len(countries_by_continent)} continents")
-        
-    except FileNotFoundError as e:
-        print(f"❌ Error: Model files not found - {e}")
-        print("Make sure 'modelo_desastres.pkl' and 'codificador_labels.pkl' are in the same directory")
-    except Exception as e:
-        print(f"❌ Error loading model: {e}")
+    print(f"✅ Loaded {sum(len(v) for v in countries_by_continent.values())} countries across {len(countries_by_continent)} continents")
 
 # Health check endpoint
 @app.get("/")
@@ -130,7 +137,6 @@ async def root():
     return {
         "service": "iAlert AI Service",
         "status": "online",
-        "model_loaded": modelo is not None,
         "version": "1.0.0"
     }
 
@@ -139,7 +145,6 @@ async def health_check():
     """Detailed health check"""
     return {
         "status": "healthy",
-        "model_status": "loaded" if modelo is not None else "not loaded",
         "countries_loaded": len(countries_by_continent),
         "total_countries": sum(len(v) for v in countries_by_continent.values())
     }
@@ -178,237 +183,138 @@ async def get_continents() -> Dict[str, List[str]]:
         "continents": list(countries_by_continent.keys())
     }
 
-# Predict disaster
-@app.post("/api/predict-disaster", response_model=PredictionResponse)
-async def predict_disaster(request: PredictionRequest):
+def verify_api_key(x_api_key: Optional[str] = Header(None, alias="X-API-Key")):
     """
-    Predict disaster probabilities for a given region and country
-    
-    Args:
-        request: PredictionRequest with region and country
-    
-    Returns:
-        Prediction probabilities for different disaster types
+    Optional token-based security guard for AI service (Issue #46).
+    If AI_SERVICE_API_KEY is configured in the environment, verifies X-API-Key header.
+    If not configured, allows requests gracefully for local development.
     """
-    if modelo is None or codificador is None:
+    expected_key = os.environ.get("AI_SERVICE_API_KEY")
+    if expected_key and x_api_key != expected_key:
         raise HTTPException(
-            status_code=503,
-            detail="Model not loaded. Please contact administrator."
+            status_code=401,
+            detail="Unauthorized: Invalid or missing X-API-Key header",
         )
-    
+    return x_api_key
+
+
+# GenAI conversational agent (lazy Gemini init: missing GEMINI_API_KEY
+# returns 503 on this route only; all other routes keep working)
+@app.post("/api/chat", response_model=ChatResponse, dependencies=[Depends(verify_api_key)])
+async def chat(request: ChatRequest):
+    """
+    Conversational weather/disaster-risk chat backed by Gemini with a
+    single get_weather_free tool. Unknown or expired session_ids
+    start a fresh session without error.
+    """
+    if not request.message or not request.message.strip():
+        raise HTTPException(
+            status_code=400,
+            detail="message must be a non-empty string",
+        )
+
+    session = get_or_create_session(request.session_id)
+
+    # Explicit lat/lon are validated here so out-of-bounds values fail fast
+    # with 400 before reaching the agent loop.
+    if (request.lat is None) != (request.lon is None):
+        raise HTTPException(
+            status_code=400,
+            detail="lat and lon must be provided together",
+        )
+    if request.lat is not None and request.lon is not None:
+        check = resolve_coords(request.lat, request.lon, session)
+        if check is None:
+            raise HTTPException(
+                status_code=400,
+                detail="Invalid coordinates: lat must be -90..90, "
+                       "lon -180..180",
+            )
+
     try:
-        # Normalize inputs (Title case to match training data)
-        region = request.region.title()
-        country = request.country.title()
-        
-        # Create input dataframe (must match training data structure)
-        df = pd.DataFrame({
-            "Region": [region],
-            "Country": [country]
-        })
-        
-        # Get probabilities from model
-        probabilities = modelo.predict_proba(df)[0]
-        labels = codificador.classes_
-        
-        # Create predictions dictionary
-        predictions = {
-            labels[i]: float(probabilities[i])
-            for i in range(len(labels))
-        }
-        
-        # Sort by probability (highest first)
-        predictions = dict(sorted(predictions.items(), key=lambda x: x[1], reverse=True))
-        
-        return PredictionResponse(
-            status="ok",
-            region=region,
-            country=country,
-            predictions=predictions
+        text, tool_calls = run_chat_turn(
+            message=request.message,
+            session=session,
+            lat=request.lat,
+            lon=request.lon,
+            units=request.units,
         )
-        
-    except Exception as e:
+    except RateLimitedError as exc:
         raise HTTPException(
-            status_code=500,
-            detail=f"Prediction error: {str(e)}"
+            status_code=exc.status_code,
+            detail=str(exc.detail),
+            headers={"Retry-After": str(exc.retry_after or 60)},
+        )
+    except ChatError as exc:
+        raise HTTPException(
+            status_code=exc.status_code,
+            detail=str(exc.detail),
         )
 
-# Get model info
-@app.get("/api/model-info")
-async def get_model_info():
-    """Get information about the loaded model"""
-    if modelo is None or codificador is None:
-        raise HTTPException(status_code=503, detail="Model not loaded")
-    
-    return {
-        "model_type": str(type(modelo)),
-        "disaster_types": list(codificador.classes_),
-        "num_disaster_types": len(codificador.classes_),
-        "features": ["Region", "Country"]
-    }
+    return ChatResponse(
+        response=text,
+        session_id=session.session_id,
+        tool_calls=[ToolCall(**tc) for tc in tool_calls] or None,
+    )
 
-# Cache for EONET data (in-memory)
-_disasters_cache = {
-    "data": None,
-    "timestamp": None,
-    "ttl": 300  # 5 minutes cache
-}
+# Initialize disaster ingestion service
+disaster_service = DisasterService()
 
 # Disasters proxy endpoint (bypasses mobile network restrictions)
+@app.get("/api/disasters/sources")
+async def get_disaster_sources():
+    """List available real-time natural disaster data sources."""
+    return {
+        "sources": disaster_service.available_sources(),
+    }
+
+
 @app.get("/api/disasters")
-async def get_disasters(limit: int = 100, days: int = 30, force_refresh: bool = False):
+async def get_disasters(
+    limit: int = 150,
+    days: int = 30,
+    force_refresh: bool = False,
+    sources: Optional[str] = None,
+):
     """
-    Fetch active disasters from NASA EONET API
-    Tries multiple API versions and endpoints with fallbacks
+    Fetch active natural disasters from multiple authoritative global APIs
+    (NASA EONET, GDACS, USGS Earthquakes, NASA FIRMS).
+    Tolerates partial failures and returns cached/stale data on error.
     """
-    from datetime import datetime, timedelta
-    import urllib.request
-    import json
-    
-    global _disasters_cache
-    
-    # Check cache first (unless force refresh)
-    if not force_refresh and _disasters_cache["data"] is not None:
-        cache_age = (datetime.now() - _disasters_cache["timestamp"]).total_seconds()
-        if cache_age < _disasters_cache["ttl"]:
-            print(f"✅ Returning cached data ({int(cache_age)}s old)")
-            result = _disasters_cache["data"].copy()
-            result["cached"] = True
-            return result
-    
-    # Try multiple endpoints - v3 first (better data)
-    endpoints = [
-        # v3 API - Better, more detailed data
-        f"https://eonet.gsfc.nasa.gov/api/v3/events?status=open&limit={limit}",
-        # v2.1 API - Fallback
-        f"https://eonet.gsfc.nasa.gov/api/v2.1/events?status=open&limit={limit}&days={days}",
-        # v3 via CORS proxy
-        f"https://api.allorigins.win/raw?url=https://eonet.gsfc.nasa.gov/api/v3/events?status=open&limit={limit}",
-        # v2.1 via CORS proxy
-        f"https://api.allorigins.win/raw?url=https://eonet.gsfc.nasa.gov/api/v2.1/events?status=open&limit={limit}&days={days}",
-        # Another CORS proxy with v3
-        f"https://corsproxy.io/?https://eonet.gsfc.nasa.gov/api/v3/events?status=open&limit={limit}"
-    ]
-    
-    last_error = None
-    
-    for url in endpoints:
-        try:
-            print(f"📡 Trying: {url[:80]}...")
-            
-            req = urllib.request.Request(
-                url,
-                headers={
-                    'User-Agent': 'iAlert-DisasterMonitoring/1.0',
-                    'Accept': 'application/json'
-                }
-            )
-            
-            with urllib.request.urlopen(req, timeout=30) as response:
-                data = json.loads(response.read().decode())
-                
-                # Handle wrapped responses from proxies
-                if "contents" in data:
-                    data = json.loads(data["contents"])
-                
-                events = data.get("events", [])
-                
-                print(f"✅ Got {len(events)} events from {url[:40]}...")
-                
-                # Process events - handle both v2.1 and v3 formats
-                processed_events = []
-                for evt in events:
-                    # v3 uses "geometry", v2.1 uses "geometries"
-                    geometries = evt.get("geometry") or evt.get("geometries")
-                    
-                    if not geometries or len(geometries) == 0:
-                        continue
-                    
-                    # Get latest geometry
-                    geom = geometries[-1] if isinstance(geometries, list) else geometries
-                    
-                    # v3: coordinates array, v2.1: coordinates in different format
-                    coords = geom.get("coordinates", [])
-                    
-                    if len(coords) < 2:
-                        continue
-                    
-                    # Extract category
-                    categories = evt.get("categories", [])
-                    category = "unknown"
-                    if categories and len(categories) > 0:
-                        # v3: categories[0]["id"], v2.1: categories[0]["id"] (same)
-                        cat_obj = categories[0]
-                        category = cat_obj.get("id") if isinstance(cat_obj, dict) else str(cat_obj)
-                    
-                    # Extract source link
-                    sources = evt.get("sources", [])
-                    link = None
-                    if sources and len(sources) > 0:
-                        source_obj = sources[0]
-                        link = source_obj.get("url") if isinstance(source_obj, dict) else None
-                    
-                    processed_events.append({
-                        "id": evt.get("id"),
-                        "title": evt.get("title"),
-                        "description": evt.get("description", ""),
-                        "category": category,
-                        "lat": coords[1],
-                        "lng": coords[0],
-                        "date": geom.get("date"),
-                        "link": link or evt.get("link")
-                    })
-                
-                result = {
-                    "status": "ok",
-                    "count": len(processed_events),
-                    "events": processed_events,
-                    "source": "eonet",
-                    "api_version": "v2.1" if "v2.1" in url else "v3",
-                    "cached": False
-                }
-                
-                # Cache the result
-                _disasters_cache["data"] = result
-                _disasters_cache["timestamp"] = datetime.now()
-                
-                print(f"✅ Returning {len(processed_events)} processed events")
-                return result
-                
-        except Exception as e:
-            last_error = str(e)
-            print(f"❌ Failed: {last_error}")
-            continue
-    
-    # All endpoints failed - return cache if available
-    if _disasters_cache["data"] is not None:
-        print(f"⚠️ All endpoints failed, returning stale cache")
-        result = _disasters_cache["data"].copy()
-        result["cached"] = True
-        cache_age = int((datetime.now() - _disasters_cache["timestamp"]).total_seconds())
-        result["cache_age_seconds"] = cache_age
-        return result
-    
-    # No cache and all endpoints failed
-    raise HTTPException(
-        status_code=503,
-        detail=f"Unable to fetch disasters from any source. Last error: {last_error}"
+    source_list = [s.strip() for s in sources.split(",")] if sources else None
+    result = disaster_service.fetch_all(
+        sources=source_list,
+        limit=limit,
+        days=days,
+        force_refresh=force_refresh,
     )
+    if result.get("count", 0) == 0 and not result.get("sources"):
+        raise HTTPException(
+            status_code=503,
+            detail="Unable to fetch disasters from any source.",
+        )
+    return result
 
 # Error handlers
 @app.exception_handler(404)
 async def not_found_handler(request, exc):
-    return {
-        "error": "Not found",
-        "detail": str(exc.detail) if hasattr(exc, 'detail') else "Resource not found"
-    }
+    return JSONResponse(
+        status_code=404,
+        content={
+            "error": "Not found",
+            "detail": str(exc.detail) if hasattr(exc, 'detail') else "Resource not found"
+        },
+    )
 
 @app.exception_handler(500)
 async def internal_error_handler(request, exc):
-    return {
-        "error": "Internal server error",
-        "detail": "An unexpected error occurred"
-    }
+    return JSONResponse(
+        status_code=500,
+        content={
+            "error": "Internal server error",
+            "detail": "An unexpected error occurred"
+        },
+    )
 
 # For local development
 if __name__ == "__main__":

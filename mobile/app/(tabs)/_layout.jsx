@@ -63,14 +63,18 @@ export default function TabsLayout() {
         }}
       />
       <Tabs.Screen
-        name="chatbot"
+        name="feed"
         options={{
-          title: "Chat Bot",
+          title: "Feed",
           tabBarIcon: ({ color, size }) => (
-            <Ionicons name="chatbubble-outline" size={size} color={color} />
+            <Ionicons name="megaphone-outline" size={size} color={color} />
           ),
         }}
       />
+      <Tabs.Screen
+  name="chatbot"
+  options={{ href: null }}  
+/>
       <Tabs.Screen
         name="user"
         options={{

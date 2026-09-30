@@ -11,27 +11,10 @@ const contacts = [
     category: 'Soporte Técnico',
     people: [
       { name: 'Rodrigo Vizcarra', email: 'rodrigo.vizcarra0209@alumnos.udg.mx' },
-      { name: 'Cristian Márquez', email: 'cristian.marquez6704@alumnos.udg.mx' },
+      
     ],
   },
-  {
-    category: 'Consultas Generales',
-    people: [
-      { name: 'Francisco Encarnación', email: 'francisco.encarnacion9995@alumnos.udg.mx' },
-    ],
-  },
-  {
-    category: 'Contacto de Emergencia',
-    people: [
-      { name: 'Ana Esparza', email: 'ana.esparza8533@alumnos.udg.mx' },
-    ],
-  },
-  {
-    category: 'Equipo de Datos',
-    people: [
-      { name: 'Irma Valdez', email: 'irma.valdez0296@alumnos.udg.mx' },
-    ],
-  },
+  
 ];
 
 // Función para abrir la aplicación de correo
