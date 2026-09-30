@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { View, StyleSheet, ActivityIndicator, Modal, Text, TouchableOpacity, ScrollView } from "react-native";
 import { WebView } from "react-native-webview";
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation } from 'expo-router';
 import { COLORS } from "../../constants/colors";
 import { Ionicons } from "@expo/vector-icons";
 
