@@ -19,9 +19,11 @@ import { healthCheckJob, photoJob } from "./config/cron.js";
 import { incidentsRouter, reportsRouter } from "./routes/incidents.routes.js";
 
 import fetch from "node-fetch";
+import cors from "cors";
 
 const app = express();
 
+app.use(cors());
 app.use("/api/webhooks", express.raw({ type: "application/json" }), webhooksRouter);
 app.use(express.json());
 
