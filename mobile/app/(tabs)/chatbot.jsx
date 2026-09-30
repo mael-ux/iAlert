@@ -80,7 +80,12 @@ export default function ChatBot() {
     try {
       const response = await fetch(`${AI_API_URL}${CHAT_ENDPOINT_PATH}`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          ...(process.env.EXPO_PUBLIC_AI_SERVICE_KEY
+            ? { "X-API-Key": process.env.EXPO_PUBLIC_AI_SERVICE_KEY }
+            : {}),
+        },
         body: JSON.stringify({
           message,
           ...(sessionId ? { session_id: sessionId } : {}),

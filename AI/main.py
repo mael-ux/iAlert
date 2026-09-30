@@ -3,7 +3,7 @@ iAlert - FastAPI Server for GenAI chatbot and disaster data
 Handles chatbot and country/disaster-data endpoints
 """
 
-from fastapi import FastAPI, HTTPException
+from fastapi import Depends, FastAPI, Header, HTTPException
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -183,9 +183,24 @@ async def get_continents() -> Dict[str, List[str]]:
         "continents": list(countries_by_continent.keys())
     }
 
+def verify_api_key(x_api_key: Optional[str] = Header(None, alias="X-API-Key")):
+    """
+    Optional token-based security guard for AI service (Issue #46).
+    If AI_SERVICE_API_KEY is configured in the environment, verifies X-API-Key header.
+    If not configured, allows requests gracefully for local development.
+    """
+    expected_key = os.environ.get("AI_SERVICE_API_KEY")
+    if expected_key and x_api_key != expected_key:
+        raise HTTPException(
+            status_code=401,
+            detail="Unauthorized: Invalid or missing X-API-Key header",
+        )
+    return x_api_key
+
+
 # GenAI conversational agent (lazy Gemini init: missing GEMINI_API_KEY
 # returns 503 on this route only; all other routes keep working)
-@app.post("/api/chat", response_model=ChatResponse)
+@app.post("/api/chat", response_model=ChatResponse, dependencies=[Depends(verify_api_key)])
 async def chat(request: ChatRequest):
     """
     Conversational weather/disaster-risk chat backed by Gemini with a
