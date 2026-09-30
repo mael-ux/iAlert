@@ -5,6 +5,7 @@ import {
   incidentsTable,
   incidentSourcesTable,
   incidentReportsTable,
+  usersTable,
 } from "../dataBase/schema.js";
 
 export const incidentsRouter = express.Router();
@@ -221,11 +222,24 @@ reportsRouter.post("/", async (req, res) => {
 
     const photoList = Array.isArray(photos) ? photos : [];
 
+    // Check if user exists to satisfy foreign key constraint gracefully
+    let reportUserId = null;
+    if (userId) {
+      const [existingUser] = await db
+        .select({ userId: usersTable.userId })
+        .from(usersTable)
+        .where(eq(usersTable.userId, userId))
+        .limit(1);
+      if (existingUser) {
+        reportUserId = existingUser.userId;
+      }
+    }
+
     const [report] = await db
       .insert(incidentReportsTable)
       .values({
         incidentId,
-        userId: userId || null,
+        userId: reportUserId,
         category,
         description: description || "",
         latitude: lat.toFixed(6),
