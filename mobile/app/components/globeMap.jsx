@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { View, StyleSheet, ActivityIndicator, Modal, Text, TouchableOpacity, ScrollView, Platform } from "react-native";
 import { WebView } from "react-native-webview";
-import { useNavigation, useRouter } from 'expo-router';
+import { useNavigation } from '@react-navigation/native';
 import { COLORS } from "../../constants/colors";
 import { Ionicons } from "@expo/vector-icons";
 import { AI_API_URL } from "../../constants/api";
@@ -40,7 +40,6 @@ const DISASTER_INFO = {
 
 export default function GlobeMap({ style }) {
   const navigation = useNavigation();
-  const router = useRouter();
   const [htmlContent, setHtmlContent] = useState(null);
   const [loading, setLoading] = useState(true);
   const [modalVisible, setModalVisible] = useState(false);
@@ -59,7 +58,38 @@ export default function GlobeMap({ style }) {
         parent.setOptions({ tabBarStyle: undefined });
       };
     }
-  }, [navigation]);
+  }, []);
+
+  useEffect(() => {
+    fetchDisasters();
+  }, []);
+
+  const fetchDisasters = async () => {
+    try {
+      console.log('🌍 Fetching disasters from backend...');
+      const response = await fetch(`${AI_API_URL}/disasters`);
+      
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+      
+      const data = await response.json();
+      console.log(`✅ Loaded ${data.count} disasters`);
+      
+      const counts = {};
+      data.events.forEach(evt => {
+        counts[evt.category] = (counts[evt.category] || 0) + 1;
+      });
+      
+      setDisastersData(data.events);
+      setDisasterCounts(counts);
+      buildGlobe(data.events);
+      
+    } catch (err) {
+      console.error('❌ Failed to fetch disasters:', err);
+      buildGlobe([]);
+    }
+  };
 
   const buildGlobe = (events) => {
     const html = `
