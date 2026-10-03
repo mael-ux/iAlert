@@ -61,5 +61,8 @@
     "eslint-config-expo": "~57.0.2",
     "typescript": "~6.0.3"
   },
-  "private": true
+  "private": true,
+  "overrides": {
+    "utf-8-validate": "5.0.10"
+  }
 }
