@@ -17,6 +17,7 @@ import { healthCheckJob, photoJob } from "./config/cron.js";
 import alertsRouter from "./routes/alerts.routes.js";
 import { incidentsRouter, reportsRouter } from "./routes/incidents.routes.js";
 
+import { ingestFromAI } from "./services/ingest.js";
 import fetch from "node-fetch";
 import cors from "cors";
 
@@ -38,6 +39,13 @@ if (ENV.KEEP_ALIVE) {
   photoJob.start();
   // eonetCheckJob.start(); // Uncomment if you have this
   console.log("Cron jobs started successfully");
+}
+
+// Pull official events from the AI service every 15 min (INGEST_ENABLED=true locally to test)
+if (ENV.INGEST_ENABLED) {
+  const run = () => ingestFromAI(db, ENV.AI_SERVICE_URL).then((st) => console.log("ingest:", st)).catch((e) => console.error("ingest failed:", e.message));
+  setTimeout(run, 5000);
+  setInterval(run, 15 * 60 * 1000);
 }
 
 // =========================

@@ -6,33 +6,24 @@ import {
   incidentSourcesTable,
   incidentReportsTable,
   usersTable,
+  incidentVotesTable,
 } from "../dataBase/schema.js";
+import { ENV } from "../config/env.js";
+import { haversineKm, findMatchingIncident, refreshTrust } from "../services/incidentLogic.js";
+import { ingestFromAI } from "../services/ingest.js";
+import { recommendationsTable } from "../dataBase/schema.js";
 
 export const incidentsRouter = express.Router();
 export const reportsRouter = express.Router();
 
-// Helper: Haversine distance in kilometers
-export function haversineKm(lat1, lon1, lat2, lon2) {
-  const R = 6371; // Earth radius in km
-  const toRad = (x) => (x * Math.PI) / 180;
-  const dLat = toRad(lat2 - lat1);
-  const dLon = toRad(lon2 - lon1);
-  const a =
-    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-    Math.cos(toRad(lat1)) *
-      Math.cos(toRad(lat2)) *
-      Math.sin(dLon / 2) *
-      Math.sin(dLon / 2);
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-  return R * c;
-}
+export { haversineKm };
 
 // ============================================================================
 // GET /api/incidents - List incidents with sources and report counts
 // ============================================================================
 incidentsRouter.get("/", async (req, res) => {
   try {
-    const { status = "active", category, limit = 50 } = req.query;
+    const { status = "active", category, limit = 50, origin, sort = "recent", lat, lng, radiusKm } = req.query;
 
     let conditions = [];
     if (status !== "all") {
@@ -44,12 +35,25 @@ incidentsRouter.get("/", async (req, res) => {
 
     const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
 
-    const incidents = await db
+    if (origin) conditions.push(eq(incidentsTable.origin, origin));
+    const where2 = conditions.length > 0 ? and(...conditions) : undefined;
+
+    let incidents = await db
       .select()
       .from(incidentsTable)
-      .where(whereClause)
-      .orderBy(desc(incidentsTable.startedAt))
-      .limit(parseInt(limit, 10) || 50);
+      .where(where2)
+      .orderBy(sort === "trust" ? desc(incidentsTable.trustScore) : desc(incidentsTable.startedAt))
+      .limit(lat && lng ? 500 : parseInt(limit, 10) || 50);
+
+    // "Near me": filter + sort by distance (JS haversine; fine at this scale)
+    if (lat && lng) {
+      const la = parseFloat(lat), lo = parseFloat(lng), r = parseFloat(radiusKm) || 300;
+      incidents = incidents
+        .map((i) => ({ ...i, distanceKm: haversineKm(la, lo, parseFloat(i.latitude), parseFloat(i.longitude)) }))
+        .filter((i) => i.distanceKm <= r)
+        .sort((a, b) => a.distanceKm - b.distanceKm)
+        .slice(0, parseInt(limit, 10) || 50);
+    }
 
     if (incidents.length === 0) {
       return res.status(200).json({ status: "ok", count: 0, incidents: [] });
@@ -102,6 +106,74 @@ incidentsRouter.get("/", async (req, res) => {
 });
 
 // ============================================================================
+// Guard: writes need a real signed-in user. TODO(before final): verify Clerk JWT instead of trusting body.userId
+// ============================================================================
+async function requireUser(req, res, next) {
+  const userId = req.body?.userId;
+  if (!userId || userId === "anonymous") {
+    return res.status(401).json({ error: "Sign in required" });
+  }
+  const [u] = await db.select({ userId: usersTable.userId }).from(usersTable).where(eq(usersTable.userId, userId)).limit(1);
+  if (!u) return res.status(401).json({ error: "Unknown user" });
+  req.userId = userId;
+  next();
+}
+
+// POST /api/incidents/ingest - manual trigger (demo): header x-ingest-secret
+incidentsRouter.post("/ingest", async (req, res) => {
+  if (!ENV.INGEST_SECRET || req.get("x-ingest-secret") !== ENV.INGEST_SECRET) {
+    return res.status(403).json({ error: "Forbidden" });
+  }
+  try {
+    res.json({ status: "ok", stats: await ingestFromAI(db, ENV.AI_SERVICE_URL) });
+  } catch (e) {
+    res.status(502).json({ error: e.message });
+  }
+});
+
+// GET /api/incidents/recommendations?category=floods&language=en
+incidentsRouter.get("/recommendations", async (req, res) => {
+  const { category, language = "en" } = req.query;
+  if (!category) return res.status(400).json({ error: "category required" });
+  const rows = await db.select().from(recommendationsTable)
+    .where(and(eq(recommendationsTable.category, category), eq(recommendationsTable.language, language)))
+    .orderBy(recommendationsTable.phase, recommendationsTable.position);
+  res.json({ recommendations: rows });
+});
+
+// Store a vote-like row once per user; re-sending flips/updates it. Then recount on the incident.
+async function castVote(req, res, kind, allowed) {
+  const id = parseInt(req.params.id, 10);
+  const value = parseInt(req.body?.value, 10);
+  if (isNaN(id) || !allowed.includes(value)) return res.status(400).json({ error: "Bad id or value" });
+  try {
+    await db.insert(incidentVotesTable)
+      .values({ incidentId: id, userId: req.userId, kind, value })
+      .onConflictDoUpdate({
+        target: [incidentVotesTable.incidentId, incidentVotesTable.userId, incidentVotesTable.kind],
+        set: { value },
+      });
+    const rows = await db.select().from(incidentVotesTable).where(eq(incidentVotesTable.incidentId, id));
+    const c = (k, v) => rows.filter((r) => r.kind === k && r.value === v).length;
+    await db.update(incidentsTable).set({
+      upvotes: c("vote", 1), downvotes: c("vote", -1),
+      stillYes: c("still_there", 1), stillNo: c("still_there", -1),
+      mergeFlags: c("wrong_merge", 1),
+      ...(kind === "still_there" && value === 1 ? { lastConfirmedAt: new Date() } : {}),
+    }).where(eq(incidentsTable.id, id));
+    const updated = await refreshTrust(db, id);
+    if (!updated) return res.status(404).json({ error: "Incident not found" });
+    res.json({ success: true, incident: updated });
+  } catch (e) {
+    console.error(`${kind} failed:`, e);
+    res.status(500).json({ error: "Failed to register" });
+  }
+}
+incidentsRouter.post("/:id/vote", requireUser, (req, res) => castVote(req, res, "vote", [1, -1]));
+incidentsRouter.post("/:id/still-there", requireUser, (req, res) => castVote(req, res, "still_there", [1, -1]));
+incidentsRouter.post("/:id/wrong-merge", requireUser, (req, res) => castVote(req, res, "wrong_merge", [1]));
+
+// ============================================================================
 // GET /api/incidents/:id - Get specific incident with full sources and reports
 // ============================================================================
 incidentsRouter.get("/:id", async (req, res) => {
@@ -146,9 +218,9 @@ incidentsRouter.get("/:id", async (req, res) => {
 // ============================================================================
 // POST /api/reports - Citizen disaster report submission
 // ============================================================================
-reportsRouter.post("/", async (req, res) => {
+reportsRouter.post("/", requireUser, async (req, res) => {
   try {
-    const { userId, category, latitude, longitude, description, photos } =
+    const { category, latitude, longitude, description, photos, media } =
       req.body;
 
     if (
@@ -168,30 +240,9 @@ reportsRouter.post("/", async (req, res) => {
       return res.status(400).json({ error: "Coordinates out of bounds" });
     }
 
-    // Proximity threshold: 35 km
-    const PROXIMITY_KM = 35;
-
-    // Search active incidents in the same category
-    const activeIncidents = await db
-      .select()
-      .from(incidentsTable)
-      .where(
-        and(
-          eq(incidentsTable.status, "active"),
-          eq(incidentsTable.category, category),
-        ),
-      );
-
-    let matchedIncident = null;
-    let minDistance = Infinity;
-
-    for (const inc of activeIncidents) {
-      const dist = haversineKm(lat, lng, parseFloat(inc.latitude), parseFloat(inc.longitude));
-      if (dist <= PROXIMITY_KM && dist < minDistance) {
-        minDistance = dist;
-        matchedIncident = inc;
-      }
-    }
+    // Per-category radius/time window from category_merge_config
+    let matchedIncident = await findMatchingIncident(db, { category, lat, lng });
+    let isNewIncident = false;
 
     let incidentId;
 
@@ -213,27 +264,19 @@ reportsRouter.post("/", async (req, res) => {
           longitude: lng.toFixed(6),
           severity: "medium",
           status: "active",
+          origin: "community",
+          lastConfirmedAt: new Date(),
         })
         .returning();
 
       incidentId = newIncident.id;
       matchedIncident = newIncident;
+      isNewIncident = true;
     }
 
     const photoList = Array.isArray(photos) ? photos : [];
 
-    // Check if user exists to satisfy foreign key constraint gracefully
-    let reportUserId = null;
-    if (userId) {
-      const [existingUser] = await db
-        .select({ userId: usersTable.userId })
-        .from(usersTable)
-        .where(eq(usersTable.userId, userId))
-        .limit(1);
-      if (existingUser) {
-        reportUserId = existingUser.userId;
-      }
-    }
+    const reportUserId = req.userId;
 
     const [report] = await db
       .insert(incidentReportsTable)
@@ -245,14 +288,18 @@ reportsRouter.post("/", async (req, res) => {
         latitude: lat.toFixed(6),
         longitude: lng.toFixed(6),
         photos: photoList,
+        media: Array.isArray(media) ? media : [],
       })
       .returning();
+    await db.update(incidentsTable).set({ lastConfirmedAt: new Date() }).where(eq(incidentsTable.id, incidentId));
+    const refreshed = await refreshTrust(db, incidentId);
+    matchedIncident = refreshed || matchedIncident;
 
     res.status(201).json({
       success: true,
       report,
       incident: matchedIncident,
-      isNewIncident: !matchedIncident || matchedIncident.id === incidentId,
+      isNewIncident,
     });
   } catch (error) {
     console.error("Error creating report:", error);
