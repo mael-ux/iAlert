@@ -108,7 +108,7 @@ incidentsRouter.get("/", async (req, res) => {
 // ============================================================================
 // Guard: writes need a real signed-in user. TODO(before final): verify Clerk JWT instead of trusting body.userId
 // ============================================================================
-async function requireUser(req, res, next) {
+export async function requireUser(req, res, next) {
   const userId = req.body?.userId;
   if (!userId || userId === "anonymous") {
     return res.status(401).json({ error: "Sign in required" });

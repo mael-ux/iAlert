@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from "react";
-import { View, Text, ScrollView, StyleSheet, ActivityIndicator, Linking, TouchableOpacity, Alert } from "react-native";
+import { View, Text, Image, ScrollView, StyleSheet, ActivityIndicator, Linking, TouchableOpacity, Alert } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { useAuth, useUser } from "@clerk/clerk-expo";
@@ -165,6 +165,14 @@ export default function IncidentDetailScreen() {
         incident.reports.map((r) => (
           <View key={r.id} style={[styles.card, card]}>
             <Text style={{ color: theme.text }}>{r.description || "(sin descripción)"}</Text>
+            {(r.media || []).filter((m) => /^https?:/.test(m.url)).map((m, i) => (
+              <View key={i} style={{ marginTop: 8 }}>
+                <Image source={{ uri: m.url }} style={{ width: "100%", height: 180, borderRadius: 10 }} />
+                <Text style={{ color: theme.textLight, fontSize: 11, marginTop: 2 }}>
+                  {m.source === "camera" ? "Tomada en la app" : "Subida de galería"}
+                </Text>
+              </View>
+            ))}
             <Text style={{ color: theme.textLight, fontSize: 12, marginTop: 4 }}>{timeAgo(r.createdAt)}</Text>
           </View>
         ))

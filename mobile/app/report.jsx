@@ -152,6 +152,31 @@ export default function ReportDisasterScreen() {
       setSubmitting(true);
       setSuccessMessage(null);
 
+      // Upload photos to storage first; if storage isn't configured, keep the local URIs.
+      const uploaded = [];
+      for (const uri of photos) {
+        try {
+          const ext = (uri.split(".").pop() || "jpg").split("?")[0].toLowerCase();
+          const r = await fetch(`${API_URL}/media/upload-url`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ userId: uid, ext }),
+          });
+          if (!r.ok) throw new Error("no upload url");
+          const { signedUrl, publicUrl } = await r.json();
+          const blob = await (await fetch(uri)).blob();
+          const put = await fetch(signedUrl, {
+            method: "PUT",
+            headers: { "Content-Type": blob.type || "image/jpeg" },
+            body: blob,
+          });
+          if (!put.ok) throw new Error("upload failed");
+          uploaded.push({ local: uri, url: publicUrl });
+        } catch (e) {
+          uploaded.push({ local: uri, url: uri });
+        }
+      }
+
       const endpoint = `${API_URL}/reports`;
       const payload = {
         userId: uid,
@@ -159,8 +184,8 @@ export default function ReportDisasterScreen() {
         latitude: lat,
         longitude: lng,
         description: description.trim(),
-        photos: photos,
-        media: photos.map((url) => ({ url, source: cameraUris.includes(url) ? "camera" : "gallery" })),
+        photos: uploaded.map((u) => u.url),
+        media: uploaded.map((u) => ({ url: u.url, source: cameraUris.includes(u.local) ? "camera" : "gallery" })),
       };
 
       const response = await fetch(endpoint, {

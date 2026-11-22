@@ -6,6 +6,9 @@ export const ENV = {
   DATABASE_URL: process.env.DATABASE_URL,
   NODE_ENV: process.env.NODE_ENV || "development",
   AI_SERVICE_URL: process.env.AI_SERVICE_URL || "https://ialert-ai-service.onrender.com",
+  SUPABASE_URL: process.env.SUPABASE_URL,
+  SUPABASE_SERVICE_KEY: process.env.SUPABASE_SERVICE_KEY, // server-only, never ship to the app
+  SUPABASE_BUCKET: process.env.SUPABASE_BUCKET || "incident-media",
   INGEST_SECRET: process.env.INGEST_SECRET, // protects POST /api/incidents/ingest
   INGEST_ENABLED: process.env.INGEST_ENABLED !== undefined ? process.env.INGEST_ENABLED === "true" : process.env.NODE_ENV === "production",
   OPENWEATHER_API_KEY: process.env.OPENWEATHER_API_KEY,

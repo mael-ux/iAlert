@@ -16,6 +16,7 @@ import { healthCheckJob, photoJob } from "./config/cron.js";
 
 import alertsRouter from "./routes/alerts.routes.js";
 import { incidentsRouter, reportsRouter } from "./routes/incidents.routes.js";
+import { mediaRouter } from "./routes/media.routes.js";
 
 import { ingestFromAI } from "./services/ingest.js";
 import fetch from "node-fetch";
@@ -376,6 +377,7 @@ app.use("/api/alerts", alertsRouter);
 // =========================
 app.use("/api/incidents", incidentsRouter);
 app.use("/api/reports", reportsRouter);
+app.use("/api/media", mediaRouter);
 
 // =========================
 //    AI PREDICTION (Optional - for production, this should be removed or secured)
