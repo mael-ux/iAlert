@@ -21,10 +21,11 @@ export default function IncidentDetailScreen() {
   const [recs, setRecs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [toast, setToast] = useState(null);
 
   const load = useCallback(async () => {
     try {
-      const res = await fetch(`${API_URL}/incidents/${id}`);
+      const res = await fetch(`${API_URL}/incidents/${id}${uid ? `?userId=${encodeURIComponent(uid)}` : ""}`);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const inc = await res.json();
       setIncident(inc);
@@ -37,7 +38,7 @@ export default function IncidentDetailScreen() {
     } finally {
       setLoading(false);
     }
-  }, [id]);
+  }, [id, uid]);
 
   useEffect(() => {
     load();
@@ -56,8 +57,10 @@ export default function IncidentDetailScreen() {
       });
       if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || `HTTP ${res.status}`);
       await load();
+      setToast(path === "vote" ? "Voto registrado" : path === "still-there" ? "Gracias por confirmar" : "Aviso enviado");
+      setTimeout(() => setToast(null), 2500);
     } catch (e) {
-      Alert.alert("Error", e.message);
+      Alert.alert("No se pudo enviar", `${e.message}\n(${API_URL})`);
     }
   };
 
@@ -119,19 +122,21 @@ export default function IncidentDetailScreen() {
       )}
 
       <View style={[styles.row, { marginTop: 14 }]}>
-        <TouchableOpacity style={[styles.voteBtn, card]} onPress={() => send("vote", 1)}>
-          <Ionicons name="thumbs-up-outline" size={18} color={theme.text} />
+        <TouchableOpacity style={[styles.voteBtn, card, incident.myVotes?.vote === 1 && styles.voteOn]} onPress={() => send("vote", 1)}>
+          <Ionicons name={incident.myVotes?.vote === 1 ? "thumbs-up" : "thumbs-up-outline"} size={18} color={theme.text} />
           <Text style={{ color: theme.text }}>{incident.upvotes || 0}</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={[styles.voteBtn, card]} onPress={() => send("vote", -1)}>
-          <Ionicons name="thumbs-down-outline" size={18} color={theme.text} />
+        <TouchableOpacity style={[styles.voteBtn, card, incident.myVotes?.vote === -1 && styles.voteOn]} onPress={() => send("vote", -1)}>
+          <Ionicons name={incident.myVotes?.vote === -1 ? "thumbs-down" : "thumbs-down-outline"} size={18} color={theme.text} />
           <Text style={{ color: theme.text }}>{incident.downvotes || 0}</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={[styles.voteBtn, card]} onPress={() => send("still-there", 1)}>
-          <Ionicons name="checkmark-circle-outline" size={18} color={theme.text} />
+        <TouchableOpacity style={[styles.voteBtn, card, incident.myVotes?.still_there === 1 && styles.voteOn]} onPress={() => send("still-there", 1)}>
+          <Ionicons name={incident.myVotes?.still_there === 1 ? "checkmark-circle" : "checkmark-circle-outline"} size={18} color={theme.text} />
           <Text style={{ color: theme.text }}>Confirmar</Text>
         </TouchableOpacity>
       </View>
+
+      {toast && <Text style={{ color: "#2e9e5b", fontWeight: "700", marginTop: 10 }}>{toast}</Text>}
 
       {recs.length > 0 && (
         <>
@@ -203,5 +208,6 @@ const styles = StyleSheet.create({
   cardTitle: { fontWeight: "600" },
   btn: { flex: 1, padding: 10, borderRadius: 10, alignItems: "center" },
   btnText: { color: "#fff", fontWeight: "700" },
+  voteOn: { borderColor: "#2e9e5b", borderWidth: 2 },
   voteBtn: { flexDirection: "row", alignItems: "center", gap: 6, borderWidth: 1, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 10 },
 });

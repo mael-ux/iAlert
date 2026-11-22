@@ -77,6 +77,19 @@ incidentsRouter.get("/", async (req, res) => {
       .where(inArray(incidentReportsTable.incidentId, incidentIds))
       .groupBy(incidentReportsTable.incidentId);
 
+    // latest report per incident (description + first photo) for richer feed cards
+    const recentReports = await db
+      .select()
+      .from(incidentReportsTable)
+      .where(inArray(incidentReportsTable.incidentId, incidentIds))
+      .orderBy(desc(incidentReportsTable.createdAt));
+    const latestMap = new Map();
+    recentReports.forEach((r) => {
+      if (latestMap.has(r.incidentId)) return;
+      const photo = (r.media || []).find((m) => /^https?:/.test(m.url))?.url || null;
+      latestMap.set(r.incidentId, { description: r.description || "", photo });
+    });
+
     const countsMap = new Map();
     reportCounts.forEach((rc) => countsMap.set(rc.incidentId, rc.count));
 
@@ -92,6 +105,7 @@ incidentsRouter.get("/", async (req, res) => {
       ...inc,
       sources: sourcesMap.get(inc.id) || [],
       reportCount: countsMap.get(inc.id) || 0,
+      latestReport: latestMap.get(inc.id) || null,
     }));
 
     res.status(200).json({
@@ -204,10 +218,20 @@ incidentsRouter.get("/:id", async (req, res) => {
       .where(eq(incidentReportsTable.incidentId, id))
       .orderBy(desc(incidentReportsTable.createdAt));
 
+    // what has THIS user already done here (to highlight buttons in the app)
+    const myVotes = {};
+    if (req.query.userId) {
+      const mine = await db.select().from(incidentVotesTable).where(
+        and(eq(incidentVotesTable.incidentId, id), eq(incidentVotesTable.userId, String(req.query.userId))),
+      );
+      mine.forEach((v) => (myVotes[v.kind] = v.value));
+    }
+
     res.status(200).json({
       ...incident,
       sources,
       reports,
+      myVotes,
     });
   } catch (error) {
     console.error("Error fetching incident detail:", error);

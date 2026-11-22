@@ -1,5 +1,5 @@
 // Pulls normalized events from the AI service (/api/disasters) and upserts them as incidents.
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { incidentsTable, incidentSourcesTable } from "../dataBase/schema.js";
 import { findMatchingIncident, refreshTrust } from "./incidentLogic.js";
 
@@ -76,4 +76,15 @@ export async function ingestFromAI(db, baseUrl, { days = 7, limit = 200 } = {}) 
   const data = await res.json();
   const events = Array.isArray(data) ? data : data.events || data.disasters || [];
   return ingestEvents(db, events);
+}
+
+// Close incidents nobody (feeds or users) has confirmed within the category's stale window.
+export async function archiveStale(db) {
+  const r = await db.execute(sql`
+    UPDATE incidents i SET status = 'resolved', archived_at = now(), resolved_at = now()
+    FROM category_merge_config c
+    WHERE i.category = c.category AND i.status = 'active'
+      AND i.last_confirmed_at < now() - (c.stale_hours || ' hours')::interval
+  `);
+  return r.rowCount ?? r.count ?? 0;
 }

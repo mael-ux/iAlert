@@ -4,7 +4,7 @@ import { WebView } from "react-native-webview";
 import { useNavigation, useRouter } from 'expo-router';
 import { COLORS } from "../../constants/colors";
 import { Ionicons } from "@expo/vector-icons";
-import { AI_API_URL } from "../../constants/api";
+import { AI_API_URL, API_URL } from "../../constants/api";
 
 // Source display names & colors for legend badges
 const SOURCE_INFO = {
@@ -12,6 +12,7 @@ const SOURCE_INFO = {
   gdacs: { name: "GDACS", color: "#ea4335" },
   usgs: { name: "USGS", color: "#fbbc05" },
   reliefweb: { name: "ReliefWeb", color: "#34a853" },
+  community: { name: "Comunidad iAlert", color: "#2e9e5b" },
   default: { name: "Unknown", color: "#9aa0a6" },
 };
 
@@ -314,6 +315,28 @@ export default function GlobeMap({ style }) {
           ...evt,
           source: evt.source || 'eonet',
         }));
+
+        // Add community-reported incidents from our own backend so the globe matches the feed
+        try {
+          const r2 = await fetch(`${API_URL}/incidents?origin=community&status=active&limit=200`);
+          if (r2.ok) {
+            const d2 = await r2.json();
+            (d2.incidents || []).forEach((i) => {
+              normalizedEvents.push({
+                id: `community-${i.id}`,
+                incidentId: i.id,
+                title: i.title,
+                description: i.latestReport?.description || '',
+                category: i.category,
+                lat: parseFloat(i.latitude),
+                lng: parseFloat(i.longitude),
+                date: i.startedAt,
+                source: 'community',
+                severity: i.severity,
+              });
+            });
+          }
+        } catch (_) {}
         
         const counts = {};
         const sourceCountsMap = {};
@@ -547,6 +570,15 @@ export default function GlobeMap({ style }) {
 
               {selectedEvent?.description ? (
                 <Text style={modalStyles.description}>{selectedEvent.description}</Text>
+              ) : null}
+
+              {selectedEvent?.incidentId ? (
+                <TouchableOpacity
+                  style={{ backgroundColor: '#2e9e5b', padding: 12, borderRadius: 10, alignItems: 'center', marginVertical: 8 }}
+                  onPress={() => { setModalVisible(false); router.push(`/incident/${selectedEvent.incidentId}`); }}
+                >
+                  <Text style={{ color: '#fff', fontWeight: '700' }}>Ver reporte, votar y confirmar</Text>
+                </TouchableOpacity>
               ) : null}
 
               <View style={modalStyles.infoSection}>

@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from "react";
 import {
   View,
   Text,
+  Image,
   FlatList,
   TouchableOpacity,
   StyleSheet,
@@ -22,50 +23,61 @@ const TABS = [
 ];
 
 function IncidentCard({ incident, theme, onPress }) {
-  const meta = CATEGORY_META[incident.category] || { icon: "alert-circle", color: theme.primary };
+  const meta = CATEGORY_META[incident.category] || { icon: "alert-circle", color: theme.primary, label: incident.category };
   const tier = TIER_META[incident.trustTier] || TIER_META.unverified;
+  const community = incident.origin === "community";
+  const heading = community ? `${meta.label} reportado` : incident.title;
+  const snippet = incident.latestReport?.description || (community ? "" : meta.label);
   return (
     <TouchableOpacity
       style={[styles.card, { backgroundColor: theme.card, borderColor: theme.border }]}
       onPress={onPress}
-      activeOpacity={0.7}
+      activeOpacity={0.75}
     >
-      <View style={styles.cardHeader}>
-        <View style={[styles.iconBadge, { backgroundColor: meta.color + "22" }]}>
-          <Ionicons name={meta.icon} size={20} color={meta.color} />
-        </View>
-        <View style={{ flex: 1 }}>
-          <Text style={[styles.cardTitle, { color: theme.text }]} numberOfLines={1}>
-            {incident.title}
-          </Text>
-          <Text style={[styles.cardMeta, { color: theme.textLight }]}>
-            {timeAgo(incident.startedAt)}
-            {incident.distanceKm != null ? ` · ${Math.round(incident.distanceKm)} km` : ""}
-          </Text>
-        </View>
-        {incident.severity && (
-          <View style={[styles.severityPill, { borderColor: meta.color }]}>
-            <Text style={[styles.severityText, { color: meta.color }]}>{incident.severity}</Text>
+      <View style={[styles.stripe, { backgroundColor: meta.color }]} />
+      <View style={{ flex: 1, padding: 14 }}>
+        <View style={styles.cardHeader}>
+          <View style={[styles.iconBadge, { backgroundColor: meta.color + "22" }]}>
+            <Ionicons name={meta.icon} size={22} color={meta.color} />
           </View>
-        )}
-      </View>
+          <View style={{ flex: 1 }}>
+            <Text style={[styles.cardTitle, { color: theme.text }]} numberOfLines={2}>{heading}</Text>
+            <Text style={[styles.cardMeta, { color: theme.textLight }]}>
+              {timeAgo(incident.startedAt)}
+              {incident.distanceKm != null ? ` · a ${Math.round(incident.distanceKm)} km` : ""}
+              {incident.severity ? ` · ${incident.severity}` : ""}
+            </Text>
+          </View>
+          <View style={[styles.tierPill, { backgroundColor: tier.color + "22" }]}>
+            <Ionicons name={tier.icon} size={13} color={tier.color} />
+            <Text style={{ color: tier.color, fontSize: 11, fontWeight: "700" }}>{tier.label}</Text>
+          </View>
+        </View>
 
-      <View style={styles.cardFooter}>
-        <View style={styles.footerItem}>
-          <Ionicons name={tier.icon} size={14} color={tier.color} />
-          <Text style={[styles.footerText, { color: tier.color, fontWeight: "700" }]}>{tier.label}</Text>
-        </View>
-        <View style={styles.footerItem}>
-          <Ionicons name="link-outline" size={14} color={theme.textLight} />
-          <Text style={[styles.footerText, { color: theme.textLight }]}>
-            {incident.sources?.length || 0} fuente{incident.sources?.length === 1 ? "" : "s"}
-          </Text>
-        </View>
-        <View style={styles.footerItem}>
-          <Ionicons name="people-outline" size={14} color={theme.textLight} />
-          <Text style={[styles.footerText, { color: theme.textLight }]}>
-            {incident.reportCount || 0} reporte{incident.reportCount === 1 ? "" : "s"}
-          </Text>
+        {!!snippet && (
+          <Text style={{ color: theme.text, marginTop: 10, opacity: 0.85 }} numberOfLines={2}>{snippet}</Text>
+        )}
+        {incident.latestReport?.photo && (
+          <Image source={{ uri: incident.latestReport.photo }} style={styles.thumb} />
+        )}
+
+        <View style={styles.cardFooter}>
+          <View style={styles.footerItem}>
+            <Ionicons name="shield-checkmark-outline" size={14} color={theme.textLight} />
+            <Text style={[styles.footerText, { color: theme.textLight }]}>
+              {incident.sources?.length || 0} fuente{incident.sources?.length === 1 ? "" : "s"}
+            </Text>
+          </View>
+          <View style={styles.footerItem}>
+            <Ionicons name="people-outline" size={14} color={theme.textLight} />
+            <Text style={[styles.footerText, { color: theme.textLight }]}>
+              {incident.reportCount || 0} reporte{incident.reportCount === 1 ? "" : "s"}
+            </Text>
+          </View>
+          <View style={styles.footerItem}>
+            <Ionicons name="thumbs-up-outline" size={14} color={theme.textLight} />
+            <Text style={[styles.footerText, { color: theme.textLight }]}>{incident.upvotes || 0}</Text>
+          </View>
         </View>
       </View>
     </TouchableOpacity>
@@ -149,6 +161,11 @@ export default function FeedScreen() {
           {locDenied ? "Activa tu ubicación para ver incidentes cercanos." : "Obteniendo tu ubicación…"}
         </Text>
       )}
+      {__DEV__ && (
+        <Text style={{ color: theme.textLight, fontSize: 10, textAlign: "center" }}>
+          API: {API_URL} · {incidents.length} incidentes
+        </Text>
+      )}
       <FlatList
         data={incidents}
         keyExtractor={(item) => String(item.id)}
@@ -186,9 +203,12 @@ const styles = StyleSheet.create({
   listContent: { padding: 16, paddingTop: 12, paddingBottom: 100 },
   tabRow: { flexDirection: "row", gap: 8, paddingHorizontal: 16, paddingTop: 60, paddingBottom: 8 },
   tabBtn: { paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20, borderWidth: 1 },
-  card: { borderRadius: 16, borderWidth: 1, padding: 14, marginBottom: 12 },
+  card: { borderRadius: 16, borderWidth: 1, marginBottom: 12, flexDirection: "row", overflow: "hidden" },
+  stripe: { width: 5 },
+  tierPill: { flexDirection: "row", alignItems: "center", gap: 4, borderRadius: 10, paddingHorizontal: 8, paddingVertical: 4 },
+  thumb: { width: "100%", height: 140, borderRadius: 10, marginTop: 10 },
   cardHeader: { flexDirection: "row", alignItems: "center", gap: 10 },
-  iconBadge: { width: 36, height: 36, borderRadius: 18, justifyContent: "center", alignItems: "center" },
+  iconBadge: { width: 40, height: 40, borderRadius: 20, justifyContent: "center", alignItems: "center" },
   cardTitle: { fontSize: 15, fontWeight: "700" },
   cardMeta: { fontSize: 12, marginTop: 2 },
   severityPill: { borderWidth: 1, borderRadius: 10, paddingHorizontal: 8, paddingVertical: 3 },
