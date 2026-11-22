@@ -70,7 +70,7 @@ export async function ingestEvents(db, events) {
   return stats;
 }
 
-export async function ingestFromAI(db, baseUrl, { days = 7, limit = 200 } = {}) {
+export async function ingestFromAI(db, baseUrl, { days = 30, limit = 200 } = {}) {
   const res = await fetch(`${baseUrl}/api/disasters?days=${days}&limit=${limit}`);
   if (!res.ok) throw new Error(`AI service responded ${res.status}`);
   const data = await res.json();

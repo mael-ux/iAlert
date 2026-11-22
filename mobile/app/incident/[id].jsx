@@ -6,6 +6,7 @@ import { useAuth, useUser } from "@clerk/clerk-expo";
 import { useTheme } from "../ThemeContext";
 import { API_URL } from "../../constants/api";
 import { CATEGORY_META, TIER_META, timeAgo } from "../../lib/incidentMeta";
+import { getCoordsQuiet } from "../../lib/location";
 
 const STALE_HOURS = 6; // ask "still there?" when nobody confirmed for this long
 
@@ -50,10 +51,11 @@ export default function IncidentDetailScreen() {
       return;
     }
     try {
+      const c = await getCoordsQuiet(); // nearby voters weigh more
       const res = await fetch(`${API_URL}/incidents/${id}/${path}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userId: uid, value }),
+        body: JSON.stringify({ userId: uid, value, latitude: c?.latitude, longitude: c?.longitude }),
       });
       if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || `HTTP ${res.status}`);
       await load();
@@ -61,6 +63,20 @@ export default function IncidentDetailScreen() {
       setTimeout(() => setToast(null), 2500);
     } catch (e) {
       Alert.alert("No se pudo enviar", `${e.message}\n(${API_URL})`);
+    }
+  };
+
+  const adminReview = async (decision) => {
+    try {
+      const res = await fetch(`${API_URL}/incidents/${id}/admin-review`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId: uid, decision }),
+      });
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || `HTTP ${res.status}`);
+      await load();
+    } catch (e) {
+      Alert.alert("Error", e.message);
     }
   };
 
@@ -107,6 +123,40 @@ export default function IncidentDetailScreen() {
         </Text>
       </View>
 
+      <View style={[styles.card, card, { borderColor: incident.promoted ? "#2e9e5b" : "#e0a100" }]}>
+        <Text style={{ color: theme.text, fontWeight: "700" }}>
+          {incident.status === "rejected"
+            ? "Rechazado por un administrador"
+            : incident.promoted
+            ? "En el globo: los usuarios cercanos reciben alertas"
+            : `En revisión: ${Math.max(incident.trustScore || 0, 0)}/${incident.promoteAt || 10} puntos para llegar al globo`}
+        </Text>
+        {!incident.promoted && incident.status !== "rejected" && (
+          <>
+            <View style={{ height: 6, borderRadius: 3, backgroundColor: theme.border, marginTop: 8 }}>
+              <View style={{ height: 6, borderRadius: 3, backgroundColor: "#e0a100", width: `${Math.min(100, Math.max(0, ((incident.trustScore || 0) / (incident.promoteAt || 10)) * 100))}%` }} />
+            </View>
+            <Text style={{ color: theme.textLight, fontSize: 12, marginTop: 6 }}>
+              Suben los puntos con reportes y votos de personas cercanas con buen historial, y pueden bajar si la comunidad lo niega.
+            </Text>
+          </>
+        )}
+      </View>
+
+      {incident.isAdmin && (
+        <View style={[styles.row, { marginTop: 10 }]}>
+          <TouchableOpacity style={[styles.btn, { backgroundColor: "#2e9e5b" }]} onPress={() => adminReview("approve")}>
+            <Text style={styles.btnText}>Admin: aprobar</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={[styles.btn, { backgroundColor: "#c0392b" }]} onPress={() => adminReview("reject")}>
+            <Text style={styles.btnText}>Admin: rechazar</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={[styles.btn, { backgroundColor: "#777" }]} onPress={() => adminReview("clear")}>
+            <Text style={styles.btnText}>Quitar</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
       {stale && incident.status === "active" && (
         <View style={[styles.card, card, { borderColor: "#e0a100" }]}>
           <Text style={{ color: theme.text, fontWeight: "700" }}>¿Sigue ocurriendo?</Text>
@@ -136,6 +186,18 @@ export default function IncidentDetailScreen() {
         </TouchableOpacity>
       </View>
 
+      {incident.status === "active" && (
+        <TouchableOpacity
+          style={[styles.btn, { backgroundColor: theme.primary, marginTop: 12, flex: 0, flexDirection: "row", gap: 8, justifyContent: "center" }]}
+          onPress={() =>
+            router.push({ pathname: "/report", params: { incidentId: String(incident.id), category: incident.category, title: incident.title } })
+          }
+        >
+          <Ionicons name="megaphone-outline" size={18} color="#fff" />
+          <Text style={styles.btnText}>Añadir mi reporte a este incidente</Text>
+        </TouchableOpacity>
+      )}
+
       {toast && <Text style={{ color: "#2e9e5b", fontWeight: "700", marginTop: 10 }}>{toast}</Text>}
 
       {recs.length > 0 && (
@@ -157,6 +219,7 @@ export default function IncidentDetailScreen() {
       ) : (
         incident.sources.map((s) => (
           <TouchableOpacity key={s.id} style={[styles.card, card]} onPress={() => s.url && Linking.openURL(s.url)}>
+            <View style={styles.kindTag}><Text style={styles.kindTagText}>FUENTE OFICIAL</Text></View>
             <Text style={[styles.cardTitle, { color: theme.text }]}>{s.sourceName}</Text>
             {s.url && <Text style={{ color: theme.primary, fontSize: 12 }}>{s.url}</Text>}
           </TouchableOpacity>
@@ -169,6 +232,11 @@ export default function IncidentDetailScreen() {
       ) : (
         incident.reports.map((r) => (
           <View key={r.id} style={[styles.card, card]}>
+            <View style={{ flexDirection: "row", gap: 6, marginBottom: 6 }}>
+              <View style={[styles.kindTag, { backgroundColor: "#4285f422" }]}><Text style={[styles.kindTagText, { color: "#4285f4" }]}>REPORTE CIUDADANO</Text></View>
+              {r.trustedAuthor && <View style={[styles.kindTag, { backgroundColor: "#2e9e5b22" }]}><Text style={[styles.kindTagText, { color: "#2e9e5b" }]}>HISTORIAL CONFIABLE</Text></View>}
+              {r.mine && <View style={[styles.kindTag, { backgroundColor: "#8882" }]}><Text style={[styles.kindTagText, { color: theme.textLight }]}>TÚ</Text></View>}
+            </View>
             <Text style={{ color: theme.text }}>{r.description || "(sin descripción)"}</Text>
             {(r.media || []).filter((m) => /^https?:/.test(m.url)).map((m, i) => (
               <View key={i} style={{ marginTop: 8 }}>
@@ -178,7 +246,7 @@ export default function IncidentDetailScreen() {
                 </Text>
               </View>
             ))}
-            <Text style={{ color: theme.textLight, fontSize: 12, marginTop: 4 }}>{timeAgo(r.createdAt)}</Text>
+            <Text style={{ color: theme.textLight, fontSize: 12, marginTop: 4 }}>{timeAgo(r.createdAt)}{r.distanceKm != null ? ` · a ${Math.round(r.distanceKm)} km del incidente` : ""}</Text>
           </View>
         ))
       )}
@@ -208,6 +276,8 @@ const styles = StyleSheet.create({
   cardTitle: { fontWeight: "600" },
   btn: { flex: 1, padding: 10, borderRadius: 10, alignItems: "center" },
   btnText: { color: "#fff", fontWeight: "700" },
+  kindTag: { alignSelf: "flex-start", backgroundColor: "#2e9e5b22", borderRadius: 6, paddingHorizontal: 7, paddingVertical: 2, marginBottom: 6 },
+  kindTagText: { color: "#2e9e5b", fontSize: 10, fontWeight: "800", letterSpacing: 0.5 },
   voteOn: { borderColor: "#2e9e5b", borderWidth: 2 },
   voteBtn: { flexDirection: "row", alignItems: "center", gap: 6, borderWidth: 1, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 10 },
 });

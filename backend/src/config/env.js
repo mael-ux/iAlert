@@ -9,6 +9,7 @@ export const ENV = {
   SUPABASE_URL: process.env.SUPABASE_URL,
   SUPABASE_SERVICE_KEY: process.env.SUPABASE_SERVICE_KEY, // server-only, never ship to the app
   SUPABASE_BUCKET: process.env.SUPABASE_BUCKET || "incident-media",
+  ADMIN_USER_IDS: (process.env.ADMIN_USER_IDS || "").split(",").map((x) => x.trim()).filter(Boolean), // Clerk user ids
   INGEST_SECRET: process.env.INGEST_SECRET, // protects POST /api/incidents/ingest
   INGEST_ENABLED: process.env.INGEST_ENABLED !== undefined ? process.env.INGEST_ENABLED === "true" : process.env.NODE_ENV === "production",
   OPENWEATHER_API_KEY: process.env.OPENWEATHER_API_KEY,

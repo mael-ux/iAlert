@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from "react";
 import {
+  TextInput,
   View,
   Text,
   Image,
@@ -18,7 +19,7 @@ import { CATEGORY_META, TIER_META, timeAgo } from "../../lib/incidentMeta";
 
 const TABS = [
   { key: "near", label: "Cerca" },
-  { key: "explore", label: "Explorar" },
+  { key: "search", label: "Buscar" },
   { key: "official", label: "Oficial" },
 ];
 
@@ -52,6 +53,29 @@ function IncidentCard({ incident, theme, onPress }) {
             <Ionicons name={tier.icon} size={13} color={tier.color} />
             <Text style={{ color: tier.color, fontSize: 11, fontWeight: "700" }}>{tier.label}</Text>
           </View>
+        </View>
+
+        <View style={{ flexDirection: "row", gap: 6, marginTop: 8, flexWrap: "wrap" }}>
+          {incident.sources?.length > 0 && (
+            <View style={[styles.tag, { backgroundColor: "#2e9e5b22" }]}>
+              <Text style={[styles.tagText, { color: "#2e9e5b" }]}>Fuente oficial</Text>
+            </View>
+          )}
+          {incident.reportCount > 0 && (
+            <View style={[styles.tag, { backgroundColor: "#4285f422" }]}>
+              <Text style={[styles.tagText, { color: "#4285f4" }]}>Reporte ciudadano</Text>
+            </View>
+          )}
+          {incident.origin === "community" && !incident.promoted && (
+            <View style={[styles.tag, { backgroundColor: "#e0a10022" }]}>
+              <Text style={[styles.tagText, { color: "#e0a100" }]}>En revisión · {Math.max(incident.trustScore || 0, 0)}/10</Text>
+            </View>
+          )}
+          {incident.promoted && incident.origin === "community" && (
+            <View style={[styles.tag, { backgroundColor: "#2e9e5b22" }]}>
+              <Text style={[styles.tagText, { color: "#2e9e5b" }]}>En el globo</Text>
+            </View>
+          )}
         </View>
 
         {!!snippet && (
@@ -93,6 +117,24 @@ export default function FeedScreen() {
   const [tab, setTab] = useState("near");
   const [pos, setPos] = useState(null);
   const [locDenied, setLocDenied] = useState(false);
+  const [query, setQuery] = useState("");
+  const [places, setPlaces] = useState([]); // geocoding results
+  const [place, setPlace] = useState(null); // chosen place {name, lat, lon}
+  const [searching, setSearching] = useState(false);
+
+  const searchPlaces = async () => {
+    if (!query.trim()) return;
+    try {
+      setSearching(true);
+      const res = await fetch(`${API_URL.replace(/\/api$/, "")}/api/search-city?q=${encodeURIComponent(query.trim())}`);
+      const data = await res.json();
+      setPlaces(Array.isArray(data) ? data : []);
+    } catch (e) {
+      setPlaces([]);
+    } finally {
+      setSearching(false);
+    }
+  };
 
   useEffect(() => {
     (async () => {
@@ -112,7 +154,10 @@ export default function FeedScreen() {
     try {
       let qs = "status=active&limit=50";
       if (tab === "near" && pos) qs += `&lat=${pos.lat}&lng=${pos.lng}&radiusKm=500`;
-      if (tab === "explore") qs += "&sort=trust";
+      if (tab === "search") {
+        if (place) qs += `&lat=${place.lat}&lng=${place.lon}&radiusKm=300`;
+        else qs += "&sort=trust";
+      }
       if (tab === "official") qs += "&origin=official";
       const res = await fetch(`${API_URL}/incidents?${qs}`);
       const data = await res.json();
@@ -123,7 +168,7 @@ export default function FeedScreen() {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [tab, pos]);
+  }, [tab, pos, place]);
 
   useEffect(() => {
     setLoading(true);
@@ -156,6 +201,41 @@ export default function FeedScreen() {
           </TouchableOpacity>
         ))}
       </View>
+      {tab === "search" && (
+        <View style={{ paddingHorizontal: 16, paddingBottom: 6 }}>
+          <View style={[styles.searchBox, { backgroundColor: theme.card, borderColor: theme.border }]}>
+            <Ionicons name="search" size={18} color={theme.textLight} />
+            <TextInput
+              value={query}
+              onChangeText={setQuery}
+              onSubmitEditing={searchPlaces}
+              placeholder="Buscar ciudad o lugar…"
+              placeholderTextColor={theme.textLight}
+              returnKeyType="search"
+              style={{ flex: 1, color: theme.text, paddingVertical: 10 }}
+            />
+            {(query || place) && (
+              <TouchableOpacity onPress={() => { setQuery(""); setPlaces([]); setPlace(null); }}>
+                <Ionicons name="close-circle" size={18} color={theme.textLight} />
+              </TouchableOpacity>
+            )}
+          </View>
+          {searching && <ActivityIndicator style={{ marginTop: 8 }} color={theme.primary} />}
+          {!place && places.map((p, i) => (
+            <TouchableOpacity
+              key={i}
+              style={[styles.placeRow, { borderColor: theme.border }]}
+              onPress={() => { setPlace({ name: `${p.name}${p.state ? ", " + p.state : ""}, ${p.country}`, lat: p.lat, lon: p.lon }); setPlaces([]); }}
+            >
+              <Ionicons name="location-outline" size={16} color={theme.primary} />
+              <Text style={{ color: theme.text }}>{p.name}{p.state ? `, ${p.state}` : ""}, {p.country}</Text>
+            </TouchableOpacity>
+          ))}
+          {place && (
+            <Text style={{ color: theme.textLight, marginTop: 6 }}>Incidentes a 300 km de {place.name}</Text>
+          )}
+        </View>
+      )}
       {tab === "near" && !pos && (
         <Text style={{ color: theme.textLight, textAlign: "center", marginHorizontal: 16 }}>
           {locDenied ? "Activa tu ubicación para ver incidentes cercanos." : "Obteniendo tu ubicación…"}
@@ -201,9 +281,13 @@ const styles = StyleSheet.create({
   container: { flex: 1 },
   centered: { flex: 1, justifyContent: "center", alignItems: "center", paddingTop: 60 },
   listContent: { padding: 16, paddingTop: 12, paddingBottom: 100 },
+  searchBox: { flexDirection: "row", alignItems: "center", gap: 8, borderWidth: 1, borderRadius: 14, paddingHorizontal: 12 },
+  placeRow: { flexDirection: "row", alignItems: "center", gap: 8, paddingVertical: 10, borderBottomWidth: StyleSheet.hairlineWidth },
   tabRow: { flexDirection: "row", gap: 8, paddingHorizontal: 16, paddingTop: 60, paddingBottom: 8 },
   tabBtn: { paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20, borderWidth: 1 },
   card: { borderRadius: 16, borderWidth: 1, marginBottom: 12, flexDirection: "row", overflow: "hidden" },
+  tag: { borderRadius: 8, paddingHorizontal: 8, paddingVertical: 3 },
+  tagText: { fontSize: 11, fontWeight: "700" },
   stripe: { width: 5 },
   tierPill: { flexDirection: "row", alignItems: "center", gap: 4, borderRadius: 10, paddingHorizontal: 8, paddingVertical: 4 },
   thumb: { width: "100%", height: 140, borderRadius: 10, marginTop: 10 },

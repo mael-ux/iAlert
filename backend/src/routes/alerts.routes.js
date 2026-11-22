@@ -1,8 +1,8 @@
 // backend/src/routes/alerts.routes.js
 import express from 'express';
 import { db } from '../config/db.js';
-import { userAlertConfigTable, disasterTypeTable } from '../dataBase/schema.js';
-import { eq } from 'drizzle-orm';
+import { userAlertConfigTable, disasterTypeTable, interestZonesTable, incidentsTable } from '../dataBase/schema.js';
+import { eq, and, gt } from 'drizzle-orm';
 import fetch from 'node-fetch';
 
 const router = express.Router();
@@ -287,6 +287,31 @@ router.get('/check-new/:userId', async (req, res) => {
       });
     }
     
+    // Community incidents that just earned their way onto the globe also alert users
+    try {
+      const conds = [eq(incidentsTable.origin, 'community'), eq(incidentsTable.promoted, true), eq(incidentsTable.status, 'active')];
+      if (lastCheckTime) conds.push(gt(incidentsTable.promotedAt, new Date(lastCheckTime)));
+      const promoted = await db.select().from(incidentsTable).where(and(...conds));
+      for (const inc of promoted) {
+        if (!config.selectedTypes.includes(inc.category)) continue;
+        const la = parseFloat(inc.latitude), lo = parseFloat(inc.longitude);
+        if (config.notifyCurrentLocation && latitude && longitude &&
+            calculateDistance(parseFloat(latitude), parseFloat(longitude), la, lo) > 500) continue;
+        if (config.notifyOnlySelectedZones && userZones.length > 0 &&
+            !userZones.some(z => calculateDistance(parseFloat(z.latitude), parseFloat(z.longitude), la, lo) <= 500)) continue;
+        newEvents.push({
+          id: `community-${inc.id}`,
+          title: inc.title,
+          categories: [{ id: inc.category, title: inc.category }],
+          geometry: [{ date: inc.promotedAt, coordinates: [lo, la] }],
+          incidentId: inc.id,
+          source: 'community',
+        });
+      }
+    } catch (e) {
+      console.error('Error adding community incidents to alerts:', e.message);
+    }
+
     // Agregar recomendaciones a cada evento
     const eventsWithRecommendations = await Promise.all(
       newEvents.map(async (event) => {

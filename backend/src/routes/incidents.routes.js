@@ -9,7 +9,7 @@ import {
   incidentVotesTable,
 } from "../dataBase/schema.js";
 import { ENV } from "../config/env.js";
-import { haversineKm, findMatchingIncident, refreshTrust } from "../services/incidentLogic.js";
+import { haversineKm, findMatchingIncident, refreshTrust, getMergeConfig, getReputations, reputationFactor, PROMOTE_AT } from "../services/incidentLogic.js";
 import { ingestFromAI } from "../services/ingest.js";
 import { recommendationsTable } from "../dataBase/schema.js";
 
@@ -23,7 +23,7 @@ export { haversineKm };
 // ============================================================================
 incidentsRouter.get("/", async (req, res) => {
   try {
-    const { status = "active", category, limit = 50, origin, sort = "recent", lat, lng, radiusKm } = req.query;
+    const { status = "active", category, limit = 50, origin, sort = "recent", lat, lng, radiusKm, promoted } = req.query;
 
     let conditions = [];
     if (status !== "all") {
@@ -36,6 +36,7 @@ incidentsRouter.get("/", async (req, res) => {
     const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
 
     if (origin) conditions.push(eq(incidentsTable.origin, origin));
+    if (promoted === "true") conditions.push(eq(incidentsTable.promoted, true));
     const where2 = conditions.length > 0 ? and(...conditions) : undefined;
 
     let incidents = await db
@@ -155,17 +156,60 @@ incidentsRouter.get("/recommendations", async (req, res) => {
   res.json({ recommendations: rows });
 });
 
+// GET /api/incidents/by-source?source=eonet&id=EONET_123 -> { incidentId }
+// Globe events come straight from the AI service; this maps one to its incident (ingesting on a miss).
+let lastOnDemandIngest = 0;
+incidentsRouter.get("/by-source", async (req, res) => {
+  const { source, id } = req.query;
+  if (!source || !id) return res.status(400).json({ error: "source and id required" });
+  const find = async () => {
+    const rows = await db.select().from(incidentSourcesTable).where(eq(incidentSourcesTable.externalEventId, String(id)));
+    return rows.find((r) => r.sourceName === source);
+  };
+  try {
+    let hit = await find();
+    if (!hit && Date.now() - lastOnDemandIngest > 60000) {
+      lastOnDemandIngest = Date.now();
+      await ingestFromAI(db, ENV.AI_SERVICE_URL).catch(() => {});
+      hit = await find();
+    }
+    if (!hit) return res.status(404).json({ error: "Incident not found for that source event" });
+    res.json({ incidentId: hit.incidentId });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// POST /api/incidents/:id/admin-review { userId, decision: approve | reject | clear }
+incidentsRouter.post("/:id/admin-review", requireUser, async (req, res) => {
+  if (!ENV.ADMIN_USER_IDS.includes(req.userId)) return res.status(403).json({ error: "Admins only" });
+  const id = parseInt(req.params.id, 10);
+  const { decision } = req.body;
+  if (isNaN(id) || !["approve", "reject", "clear"].includes(decision)) return res.status(400).json({ error: "Bad request" });
+  await db.update(incidentsTable).set({ adminDecision: decision === "clear" ? null : decision, ...(decision === "clear" ? { status: "active" } : {}) }).where(eq(incidentsTable.id, id));
+  const updated = await refreshTrust(db, id);
+  if (!updated) return res.status(404).json({ error: "Incident not found" });
+  res.json({ success: true, incident: updated });
+});
+
 // Store a vote-like row once per user; re-sending flips/updates it. Then recount on the incident.
 async function castVote(req, res, kind, allowed) {
   const id = parseInt(req.params.id, 10);
   const value = parseInt(req.body?.value, 10);
   if (isNaN(id) || !allowed.includes(value)) return res.status(400).json({ error: "Bad id or value" });
   try {
+    // How far is the voter from the incident? (nearby people count more; unknown location counts less)
+    let distanceKm = null;
+    const la = parseFloat(req.body?.latitude), lo = parseFloat(req.body?.longitude);
+    if (Number.isFinite(la) && Number.isFinite(lo)) {
+      const [inc] = await db.select().from(incidentsTable).where(eq(incidentsTable.id, id)).limit(1);
+      if (inc) distanceKm = haversineKm(la, lo, parseFloat(inc.latitude), parseFloat(inc.longitude)).toFixed(1);
+    }
     await db.insert(incidentVotesTable)
-      .values({ incidentId: id, userId: req.userId, kind, value })
+      .values({ incidentId: id, userId: req.userId, kind, value, distanceKm })
       .onConflictDoUpdate({
         target: [incidentVotesTable.incidentId, incidentVotesTable.userId, incidentVotesTable.kind],
-        set: { value },
+        set: { value, distanceKm },
       });
     const rows = await db.select().from(incidentVotesTable).where(eq(incidentVotesTable.incidentId, id));
     const c = (k, v) => rows.filter((r) => r.kind === k && r.value === v).length;
@@ -212,11 +256,26 @@ incidentsRouter.get("/:id", async (req, res) => {
       .from(incidentSourcesTable)
       .where(eq(incidentSourcesTable.incidentId, id));
 
-    const reports = await db
+    const rawReports = await db
       .select()
       .from(incidentReportsTable)
       .where(eq(incidentReportsTable.incidentId, id))
       .orderBy(desc(incidentReportsTable.createdAt));
+
+    // Every contribution is labelled by kind; author ids are never sent to other users.
+    const reps = await getReputations(db, rawReports.map((r) => r.userId), id);
+    const reports = rawReports.map((r) => ({
+      id: r.id,
+      kind: "citizen", // citizen report (official info comes in `sources`)
+      description: r.description,
+      media: r.media || [],
+      photos: r.photos || [],
+      createdAt: r.createdAt,
+      distanceKm: r.distanceKm != null ? Number(r.distanceKm) : null,
+      trustedAuthor: reputationFactor(reps[r.userId]) >= 1.5,
+      mine: !!req.query.userId && r.userId === String(req.query.userId),
+    }));
+    const officialSources = sources.map((s) => ({ ...s, kind: "official" }));
 
     // what has THIS user already done here (to highlight buttons in the app)
     const myVotes = {};
@@ -229,9 +288,11 @@ incidentsRouter.get("/:id", async (req, res) => {
 
     res.status(200).json({
       ...incident,
-      sources,
+      sources: officialSources,
       reports,
       myVotes,
+      promoteAt: PROMOTE_AT,
+      isAdmin: !!req.query.userId && ENV.ADMIN_USER_IDS.includes(String(req.query.userId)),
     });
   } catch (error) {
     console.error("Error fetching incident detail:", error);
@@ -244,8 +305,17 @@ incidentsRouter.get("/:id", async (req, res) => {
 // ============================================================================
 reportsRouter.post("/", requireUser, async (req, res) => {
   try {
-    const { category, latitude, longitude, description, photos, media } =
+    const { category: bodyCategory, incidentId: bodyIncidentId, latitude, longitude, description, photos, media } =
       req.body;
+
+    // Reporting on an existing incident (e.g. citizen follow-up on an official event)?
+    let targetIncident = null;
+    if (bodyIncidentId) {
+      [targetIncident] = await db.select().from(incidentsTable).where(eq(incidentsTable.id, parseInt(bodyIncidentId, 10))).limit(1);
+      if (!targetIncident) return res.status(404).json({ error: "Incident not found" });
+      if (targetIncident.status !== "active") return res.status(409).json({ error: "This incident is closed" });
+    }
+    const category = targetIncident ? targetIncident.category : bodyCategory;
 
     if (
       latitude === undefined ||
@@ -265,7 +335,7 @@ reportsRouter.post("/", requireUser, async (req, res) => {
     }
 
     // Per-category radius/time window from category_merge_config
-    let matchedIncident = await findMatchingIncident(db, { category, lat, lng });
+    let matchedIncident = targetIncident || (await findMatchingIncident(db, { category, lat, lng }));
     let isNewIncident = false;
 
     let incidentId;
@@ -301,6 +371,8 @@ reportsRouter.post("/", requireUser, async (req, res) => {
     const photoList = Array.isArray(photos) ? photos : [];
 
     const reportUserId = req.userId;
+    // distance reporter -> incident: nearby witnesses weigh more in the trust score
+    const distanceKm = haversineKm(lat, lng, parseFloat(matchedIncident.latitude), parseFloat(matchedIncident.longitude)).toFixed(1);
 
     const [report] = await db
       .insert(incidentReportsTable)
@@ -313,6 +385,7 @@ reportsRouter.post("/", requireUser, async (req, res) => {
         longitude: lng.toFixed(6),
         photos: photoList,
         media: Array.isArray(media) ? media : [],
+        distanceKm,
       })
       .returning();
     await db.update(incidentsTable).set({ lastConfirmedAt: new Date() }).where(eq(incidentsTable.id, incidentId));

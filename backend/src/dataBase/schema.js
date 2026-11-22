@@ -83,6 +83,9 @@ export const incidentsTable = pgTable("incidents", {
   mergeFlags: integer("merge_flags").default(0),
   lastConfirmedAt: timestamp("last_confirmed_at").defaultNow(),
   archivedAt: timestamp("archived_at"),
+  promoted: boolean("promoted").default(false),
+  promotedAt: timestamp("promoted_at"),
+  adminDecision: text("admin_decision"), // approve | reject
 });
 
 export const incidentSourcesTable = pgTable("incident_sources", {
@@ -114,6 +117,7 @@ export const incidentReportsTable = pgTable("incident_reports", {
   createdAt: timestamp("created_at").defaultNow(),
   media: jsonb("media").default([]), // [{url, source: 'camera'|'gallery'}]
   originalIncidentId: integer("original_incident_id"),
+  distanceKm: numeric("distance_km", { precision: 8, scale: 1 }),
   language: text("language"),
 });
 
@@ -129,6 +133,7 @@ export const incidentVotesTable = pgTable(
       .references(() => usersTable.userId, { onDelete: "cascade" }),
     kind: text("kind").notNull(), // vote | still_there | wrong_merge
     value: smallint("value").notNull(),
+    distanceKm: numeric("distance_km", { precision: 8, scale: 1 }),
     createdAt: timestamp("created_at").defaultNow(),
   },
   (t) => [uniqueIndex("uq_incident_votes").on(t.incidentId, t.userId, t.kind)],

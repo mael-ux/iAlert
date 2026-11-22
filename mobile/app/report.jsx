@@ -14,6 +14,7 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import * as Location from "expo-location";
 import * as ImagePicker from "expo-image-picker";
+import { useLocalSearchParams } from "expo-router";
 import { useAuth, useUser } from "@clerk/clerk-expo";
 import { useTheme } from "./ThemeContext";
 import { useRouter } from "expo-router";
@@ -35,7 +36,9 @@ export default function ReportDisasterScreen() {
   const { userId } = useAuth();
   const { user } = useUser();
 
-  const [selectedCategory, setSelectedCategory] = useState("wildfires");
+  const params = useLocalSearchParams();
+  const targetIncidentId = params.incidentId ? String(params.incidentId) : null; // reporting on an existing incident
+  const [selectedCategory, setSelectedCategory] = useState(params.category ? String(params.category) : "wildfires");
   const [description, setDescription] = useState("");
   const [coords, setCoords] = useState(null);
   const [locationLoading, setLocationLoading] = useState(false);
@@ -181,6 +184,7 @@ export default function ReportDisasterScreen() {
       const payload = {
         userId: uid,
         category: selectedCategory,
+        incidentId: targetIncidentId,
         latitude: lat,
         longitude: lng,
         description: description.trim(),
@@ -232,9 +236,11 @@ export default function ReportDisasterScreen() {
 
       <View style={styles.header}>
         <Ionicons name="megaphone" size={32} color={theme.primary} />
-        <Text style={[styles.headerTitle, { color: theme.text }]}>Report a Disaster</Text>
+        <Text style={[styles.headerTitle, { color: theme.text }]}>{targetIncidentId ? "Add to this incident" : "Report a Disaster"}</Text>
         <Text style={[styles.headerSubtitle, { color: theme.textLight }]}>
-          Share verified field observations with your community and emergency services.
+          {targetIncidentId && params.title
+            ? `Tu observación se agregará a: ${params.title}`
+            : "Share verified field observations with your community and emergency services."}
         </Text>
       </View>
 
@@ -260,6 +266,7 @@ export default function ReportDisasterScreen() {
                   borderColor: isSelected ? cat.color : theme.border,
                 },
               ]}
+              disabled={!!targetIncidentId}
               onPress={() => setSelectedCategory(cat.id)}
             >
               <Ionicons
