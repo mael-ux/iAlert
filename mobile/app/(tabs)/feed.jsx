@@ -12,20 +12,18 @@ import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { useTheme } from "../ThemeContext";
 import { API_URL } from "../../constants/api";
+import * as Location from "expo-location";
+import { CATEGORY_META, TIER_META, timeAgo } from "../../lib/incidentMeta";
 
-const CATEGORY_META = {
-  wildfires: { icon: "flame", color: "#ff4500" },
-  floods: { icon: "water", color: "#1e90ff" },
-  earthquakes: { icon: "pulse", color: "#8b4513" },
-  severeStorms: { icon: "thunderstorm", color: "#4169e1" },
-  volcanoes: { icon: "triangle", color: "#dc143c" },
-  landslides: { icon: "trending-down", color: "#a0522d" },
-  cyclone: { icon: "sync", color: "#00ced1" },
-  manmade: { icon: "warning", color: "#ffa500" },
-};
+const TABS = [
+  { key: "near", label: "Cerca" },
+  { key: "explore", label: "Explorar" },
+  { key: "official", label: "Oficial" },
+];
 
 function IncidentCard({ incident, theme, onPress }) {
   const meta = CATEGORY_META[incident.category] || { icon: "alert-circle", color: theme.primary };
+  const tier = TIER_META[incident.trustTier] || TIER_META.unverified;
   return (
     <TouchableOpacity
       style={[styles.card, { backgroundColor: theme.card, borderColor: theme.border }]}
@@ -41,7 +39,8 @@ function IncidentCard({ incident, theme, onPress }) {
             {incident.title}
           </Text>
           <Text style={[styles.cardMeta, { color: theme.textLight }]}>
-            {new Date(incident.startedAt).toLocaleString()}
+            {timeAgo(incident.startedAt)}
+            {incident.distanceKm != null ? ` · ${Math.round(incident.distanceKm)} km` : ""}
           </Text>
         </View>
         {incident.severity && (
@@ -53,15 +52,19 @@ function IncidentCard({ incident, theme, onPress }) {
 
       <View style={styles.cardFooter}>
         <View style={styles.footerItem}>
+          <Ionicons name={tier.icon} size={14} color={tier.color} />
+          <Text style={[styles.footerText, { color: tier.color, fontWeight: "700" }]}>{tier.label}</Text>
+        </View>
+        <View style={styles.footerItem}>
           <Ionicons name="link-outline" size={14} color={theme.textLight} />
           <Text style={[styles.footerText, { color: theme.textLight }]}>
-            {incident.sources?.length || 0} source{incident.sources?.length === 1 ? "" : "s"}
+            {incident.sources?.length || 0} fuente{incident.sources?.length === 1 ? "" : "s"}
           </Text>
         </View>
         <View style={styles.footerItem}>
           <Ionicons name="people-outline" size={14} color={theme.textLight} />
           <Text style={[styles.footerText, { color: theme.textLight }]}>
-            {incident.reportCount || 0} report{incident.reportCount === 1 ? "" : "s"}
+            {incident.reportCount || 0} reporte{incident.reportCount === 1 ? "" : "s"}
           </Text>
         </View>
       </View>
@@ -75,10 +78,31 @@ export default function FeedScreen() {
   const [incidents, setIncidents] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [tab, setTab] = useState("near");
+  const [pos, setPos] = useState(null);
+  const [locDenied, setLocDenied] = useState(false);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const { status } = await Location.requestForegroundPermissionsAsync();
+        if (status !== "granted") return setLocDenied(true);
+        const last = await Location.getLastKnownPositionAsync();
+        const cur = last || (await Location.getCurrentPositionAsync({}));
+        setPos({ lat: cur.coords.latitude, lng: cur.coords.longitude });
+      } catch (e) {
+        setLocDenied(true);
+      }
+    })();
+  }, []);
 
   const loadIncidents = useCallback(async () => {
     try {
-      const res = await fetch(`${API_URL}/incidents?status=active`);
+      let qs = "status=active&limit=50";
+      if (tab === "near" && pos) qs += `&lat=${pos.lat}&lng=${pos.lng}&radiusKm=500`;
+      if (tab === "explore") qs += "&sort=trust";
+      if (tab === "official") qs += "&origin=official";
+      const res = await fetch(`${API_URL}/incidents?${qs}`);
       const data = await res.json();
       setIncidents(data.incidents || []);
     } catch (err) {
@@ -87,9 +111,10 @@ export default function FeedScreen() {
       setLoading(false);
       setRefreshing(false);
     }
-  }, []);
+  }, [tab, pos]);
 
   useEffect(() => {
+    setLoading(true);
     loadIncidents();
   }, [loadIncidents]);
 
@@ -108,6 +133,22 @@ export default function FeedScreen() {
 
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>
+      <View style={styles.tabRow}>
+        {TABS.map((t) => (
+          <TouchableOpacity
+            key={t.key}
+            onPress={() => setTab(t.key)}
+            style={[styles.tabBtn, { backgroundColor: tab === t.key ? theme.primary : theme.card, borderColor: theme.border }]}
+          >
+            <Text style={{ color: tab === t.key ? "#fff" : theme.text, fontWeight: "600" }}>{t.label}</Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+      {tab === "near" && !pos && (
+        <Text style={{ color: theme.textLight, textAlign: "center", marginHorizontal: 16 }}>
+          {locDenied ? "Activa tu ubicación para ver incidentes cercanos." : "Obteniendo tu ubicación…"}
+        </Text>
+      )}
       <FlatList
         data={incidents}
         keyExtractor={(item) => String(item.id)}
@@ -116,7 +157,7 @@ export default function FeedScreen() {
         ListEmptyComponent={
           <View style={styles.centered}>
             <Ionicons name="checkmark-circle-outline" size={48} color={theme.textLight} />
-            <Text style={{ color: theme.textLight, marginTop: 8 }}>No active incidents nearby</Text>
+            <Text style={{ color: theme.textLight, marginTop: 8 }}>No hay incidentes activos</Text>
           </View>
         }
         renderItem={({ item }) => (
@@ -142,7 +183,9 @@ export default function FeedScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1 },
   centered: { flex: 1, justifyContent: "center", alignItems: "center", paddingTop: 60 },
-  listContent: { padding: 16, paddingTop: 60, paddingBottom: 100 },
+  listContent: { padding: 16, paddingTop: 12, paddingBottom: 100 },
+  tabRow: { flexDirection: "row", gap: 8, paddingHorizontal: 16, paddingTop: 60, paddingBottom: 8 },
+  tabBtn: { paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20, borderWidth: 1 },
   card: { borderRadius: 16, borderWidth: 1, padding: 14, marginBottom: 12 },
   cardHeader: { flexDirection: "row", alignItems: "center", gap: 10 },
   iconBadge: { width: 36, height: 36, borderRadius: 18, justifyContent: "center", alignItems: "center" },

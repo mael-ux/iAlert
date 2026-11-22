@@ -43,6 +43,7 @@ export default function ReportDisasterScreen() {
   const [manualLat, setManualLat] = useState("");
   const [manualLng, setManualLng] = useState("");
   const [photos, setPhotos] = useState([]);
+  const [cameraUris, setCameraUris] = useState([]);
   const [submitting, setSubmitting] = useState(false);
   const [successMessage, setSuccessMessage] = useState(null);
   const router = useRouter();
@@ -121,6 +122,7 @@ export default function ReportDisasterScreen() {
 
       if (!result.canceled && result.assets && result.assets.length > 0) {
         setPhotos((prev) => [...prev, result.assets[0].uri]);
+        setCameraUris((prev) => [...prev, result.assets[0].uri]);
       }
     } catch (err) {
       console.warn("Error taking photo:", err);
@@ -140,18 +142,25 @@ export default function ReportDisasterScreen() {
       return;
     }
 
+    const uid = userId || user?.id;
+    if (!uid) {
+      Alert.alert("Inicia sesión", "Necesitas iniciar sesión para enviar un reporte.");
+      return;
+    }
+
     try {
       setSubmitting(true);
       setSuccessMessage(null);
 
       const endpoint = `${API_URL}/reports`;
       const payload = {
-        userId: userId || user?.id || "anonymous",
+        userId: uid,
         category: selectedCategory,
         latitude: lat,
         longitude: lng,
         description: description.trim(),
         photos: photos,
+        media: photos.map((url) => ({ url, source: cameraUris.includes(url) ? "camera" : "gallery" })),
       };
 
       const response = await fetch(endpoint, {
