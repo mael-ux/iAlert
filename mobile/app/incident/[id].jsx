@@ -50,6 +50,7 @@ export default function IncidentDetailScreen() {
       Alert.alert("Inicia sesión", "Necesitas una cuenta para votar o confirmar.");
       return;
     }
+    setToast("Enviando…");
     try {
       const c = await getCoordsQuiet(); // nearby voters weigh more
       const res = await fetch(`${API_URL}/incidents/${id}/${path}`, {
@@ -62,6 +63,7 @@ export default function IncidentDetailScreen() {
       setToast(path === "vote" ? "Voto registrado" : path === "still-there" ? "Gracias por confirmar" : "Aviso enviado");
       setTimeout(() => setToast(null), 2500);
     } catch (e) {
+      setToast(null);
       Alert.alert("No se pudo enviar", `${e.message}\n(${API_URL})`);
     }
   };

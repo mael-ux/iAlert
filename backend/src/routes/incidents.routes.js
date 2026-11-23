@@ -10,7 +10,7 @@ import {
 } from "../dataBase/schema.js";
 import { ENV } from "../config/env.js";
 import { haversineKm, findMatchingIncident, refreshTrust, getMergeConfig, getReputations, reputationFactor, PROMOTE_AT } from "../services/incidentLogic.js";
-import { ingestFromAI } from "../services/ingest.js";
+import { ingestFromAI, ingestState } from "../services/ingest.js";
 import { recommendationsTable } from "../dataBase/schema.js";
 
 export const incidentsRouter = express.Router();
@@ -154,6 +154,21 @@ incidentsRouter.get("/recommendations", async (req, res) => {
     .where(and(eq(recommendationsTable.category, category), eq(recommendationsTable.language, language)))
     .orderBy(recommendationsTable.phase, recommendationsTable.position);
   res.json({ recommendations: rows });
+});
+
+// GET /api/incidents/stats - quick health check: open it in a browser to see what is in the DB
+incidentsRouter.get("/stats", async (req, res) => {
+  try {
+    const r = await db.execute(sql`SELECT origin, status, promoted, count(*)::int AS n FROM incidents GROUP BY 1,2,3 ORDER BY 1,2,3`);
+    res.json({
+      incidents: Array.isArray(r) ? r : r.rows,
+      ingestEnabled: ENV.INGEST_ENABLED,
+      aiService: ENV.AI_SERVICE_URL,
+      lastIngest: ingestState,
+    });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
 });
 
 // GET /api/incidents/by-source?source=eonet&id=EONET_123 -> { incidentId }

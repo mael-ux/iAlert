@@ -3,6 +3,8 @@ import { eq, sql } from "drizzle-orm";
 import { incidentsTable, incidentSourcesTable } from "../dataBase/schema.js";
 import { findMatchingIncident, refreshTrust } from "./incidentLogic.js";
 
+export const ingestState = { lastRun: null, stats: null, error: null };
+
 const SEVERITIES = ["low", "medium", "high", "critical"];
 
 export async function ingestEvents(db, events) {
@@ -65,6 +67,7 @@ export async function ingestEvents(db, events) {
     } catch (e) {
       console.error("ingest event failed:", ev.id, e.message);
       stats.skipped++;
+      stats.firstError = stats.firstError || `${ev.id}: ${e.message}`;
     }
   }
   return stats;
@@ -72,10 +75,17 @@ export async function ingestEvents(db, events) {
 
 export async function ingestFromAI(db, baseUrl, { days = 30, limit = 200 } = {}) {
   const res = await fetch(`${baseUrl}/api/disasters?days=${days}&limit=${limit}`);
-  if (!res.ok) throw new Error(`AI service responded ${res.status}`);
+  if (!res.ok) {
+    ingestState.error = `AI service responded ${res.status}`;
+    throw new Error(ingestState.error);
+  }
   const data = await res.json();
   const events = Array.isArray(data) ? data : data.events || data.disasters || [];
-  return ingestEvents(db, events);
+  const stats = await ingestEvents(db, events);
+  ingestState.lastRun = new Date().toISOString();
+  ingestState.stats = { ...stats, fetchedFromAI: events.length };
+  ingestState.error = null;
+  return stats;
 }
 
 // Close incidents nobody (feeds or users) has confirmed within the category's stale window.
