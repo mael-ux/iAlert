@@ -98,7 +98,7 @@ export default function ReportDisasterScreen() {
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
         allowsEditing: true,
         aspect: [4, 3],
-        quality: 0.7,
+        quality: 0.5,
       });
 
       if (!result.canceled && result.assets && result.assets.length > 0) {
@@ -120,7 +120,7 @@ export default function ReportDisasterScreen() {
       const result = await ImagePicker.launchCameraAsync({
         allowsEditing: true,
         aspect: [4, 3],
-        quality: 0.7,
+        quality: 0.5,
       });
 
       if (!result.canceled && result.assets && result.assets.length > 0) {
@@ -157,27 +157,33 @@ export default function ReportDisasterScreen() {
 
       // Upload photos to storage first; if storage isn't configured, keep the local URIs.
       const uploaded = [];
+      const failures = [];
+      const toBase64 = (blob) =>
+        new Promise((resolve, reject) => {
+          const fr = new FileReader();
+          fr.onloadend = () => resolve(String(fr.result).split(",")[1]);
+          fr.onerror = () => reject(new Error("no se pudo leer la foto"));
+          fr.readAsDataURL(blob);
+        });
       for (const uri of photos) {
         try {
           const ext = (uri.split(".").pop() || "jpg").split("?")[0].toLowerCase();
-          const r = await fetch(`${API_URL}/media/upload-url`, {
+          const base64 = await toBase64(await (await fetch(uri)).blob());
+          const r = await fetch(`${API_URL}/media/upload`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ userId: uid, ext }),
+            body: JSON.stringify({ userId: uid, ext, base64 }),
           });
-          if (!r.ok) throw new Error("no upload url");
-          const { signedUrl, publicUrl } = await r.json();
-          const blob = await (await fetch(uri)).blob();
-          const put = await fetch(signedUrl, {
-            method: "PUT",
-            headers: { "Content-Type": blob.type || "image/jpeg" },
-            body: blob,
-          });
-          if (!put.ok) throw new Error("upload failed");
-          uploaded.push({ local: uri, url: publicUrl });
+          const body = await r.json().catch(() => ({}));
+          if (!r.ok) throw new Error(body.error || `HTTP ${r.status}`);
+          uploaded.push({ local: uri, url: body.url });
         } catch (e) {
+          failures.push(e.message);
           uploaded.push({ local: uri, url: uri });
         }
+      }
+      if (failures.length) {
+        Alert.alert("Las fotos no se subieron", `El reporte se enviará sin fotos visibles para otros.\n\nMotivo: ${failures[0]}`);
       }
 
       const endpoint = `${API_URL}/reports`;

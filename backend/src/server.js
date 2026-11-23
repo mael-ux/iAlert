@@ -26,7 +26,7 @@ const app = express();
 
 app.use(cors());
 app.use("/api/webhooks", express.raw({ type: "application/json" }), webhooksRouter);
-app.use(express.json());
+app.use(express.json({ limit: "12mb" })); // photo uploads arrive as base64
 
 // 5001 is the canonical backend port (agrees with env.js default and README).
 const PORT = ENV.PORT || 5001;
