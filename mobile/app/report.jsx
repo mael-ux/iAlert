@@ -14,6 +14,7 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import * as Location from "expo-location";
 import * as ImagePicker from "expo-image-picker";
+import { useLocalSearchParams } from "expo-router";
 import { useAuth, useUser } from "@clerk/clerk-expo";
 import { useTheme } from "./ThemeContext";
 import { useRouter } from "expo-router";
@@ -35,7 +36,9 @@ export default function ReportDisasterScreen() {
   const { userId } = useAuth();
   const { user } = useUser();
 
-  const [selectedCategory, setSelectedCategory] = useState("wildfires");
+  const params = useLocalSearchParams();
+  const targetIncidentId = params.incidentId ? String(params.incidentId) : null; // reporting on an existing incident
+  const [selectedCategory, setSelectedCategory] = useState(params.category ? String(params.category) : "wildfires");
   const [description, setDescription] = useState("");
   const [coords, setCoords] = useState(null);
   const [locationLoading, setLocationLoading] = useState(false);
@@ -43,6 +46,7 @@ export default function ReportDisasterScreen() {
   const [manualLat, setManualLat] = useState("");
   const [manualLng, setManualLng] = useState("");
   const [photos, setPhotos] = useState([]);
+  const [cameraUris, setCameraUris] = useState([]);
   const [submitting, setSubmitting] = useState(false);
   const [successMessage, setSuccessMessage] = useState(null);
   const router = useRouter();
@@ -94,7 +98,7 @@ export default function ReportDisasterScreen() {
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
         allowsEditing: true,
         aspect: [4, 3],
-        quality: 0.7,
+        quality: 0.5,
       });
 
       if (!result.canceled && result.assets && result.assets.length > 0) {
@@ -116,11 +120,12 @@ export default function ReportDisasterScreen() {
       const result = await ImagePicker.launchCameraAsync({
         allowsEditing: true,
         aspect: [4, 3],
-        quality: 0.7,
+        quality: 0.5,
       });
 
       if (!result.canceled && result.assets && result.assets.length > 0) {
         setPhotos((prev) => [...prev, result.assets[0].uri]);
+        setCameraUris((prev) => [...prev, result.assets[0].uri]);
       }
     } catch (err) {
       console.warn("Error taking photo:", err);
@@ -140,18 +145,57 @@ export default function ReportDisasterScreen() {
       return;
     }
 
+    const uid = userId || user?.id;
+    if (!uid) {
+      Alert.alert("Inicia sesión", "Necesitas iniciar sesión para enviar un reporte.");
+      return;
+    }
+
     try {
       setSubmitting(true);
       setSuccessMessage(null);
 
+      // Upload photos to storage first; if storage isn't configured, keep the local URIs.
+      const uploaded = [];
+      const failures = [];
+      const toBase64 = (blob) =>
+        new Promise((resolve, reject) => {
+          const fr = new FileReader();
+          fr.onloadend = () => resolve(String(fr.result).split(",")[1]);
+          fr.onerror = () => reject(new Error("no se pudo leer la foto"));
+          fr.readAsDataURL(blob);
+        });
+      for (const uri of photos) {
+        try {
+          const ext = (uri.split(".").pop() || "jpg").split("?")[0].toLowerCase();
+          const base64 = await toBase64(await (await fetch(uri)).blob());
+          const r = await fetch(`${API_URL}/media/upload`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ userId: uid, ext, base64 }),
+          });
+          const body = await r.json().catch(() => ({}));
+          if (!r.ok) throw new Error(body.error || `HTTP ${r.status}`);
+          uploaded.push({ local: uri, url: body.url });
+        } catch (e) {
+          failures.push(e.message);
+          uploaded.push({ local: uri, url: uri });
+        }
+      }
+      if (failures.length) {
+        Alert.alert("Las fotos no se subieron", `El reporte se enviará sin fotos visibles para otros.\n\nMotivo: ${failures[0]}`);
+      }
+
       const endpoint = `${API_URL}/reports`;
       const payload = {
-        userId: userId || user?.id || "anonymous",
+        userId: uid,
         category: selectedCategory,
+        incidentId: targetIncidentId,
         latitude: lat,
         longitude: lng,
         description: description.trim(),
-        photos: photos,
+        photos: uploaded.map((u) => u.url),
+        media: uploaded.map((u) => ({ url: u.url, source: cameraUris.includes(u.local) ? "camera" : "gallery" })),
       };
 
       const response = await fetch(endpoint, {
@@ -198,9 +242,11 @@ export default function ReportDisasterScreen() {
 
       <View style={styles.header}>
         <Ionicons name="megaphone" size={32} color={theme.primary} />
-        <Text style={[styles.headerTitle, { color: theme.text }]}>Report a Disaster</Text>
+        <Text style={[styles.headerTitle, { color: theme.text }]}>{targetIncidentId ? "Add to this incident" : "Report a Disaster"}</Text>
         <Text style={[styles.headerSubtitle, { color: theme.textLight }]}>
-          Share verified field observations with your community and emergency services.
+          {targetIncidentId && params.title
+            ? `Tu observación se agregará a: ${params.title}`
+            : "Share verified field observations with your community and emergency services."}
         </Text>
       </View>
 
@@ -226,6 +272,7 @@ export default function ReportDisasterScreen() {
                   borderColor: isSelected ? cat.color : theme.border,
                 },
               ]}
+              disabled={!!targetIncidentId}
               onPress={() => setSelectedCategory(cat.id)}
             >
               <Ionicons

@@ -1,10 +1,10 @@
 import React, { useState, useEffect, useMemo } from "react";
-import { View, StyleSheet, ActivityIndicator, Modal, Text, TouchableOpacity, ScrollView, Platform } from "react-native";
+import { View, StyleSheet, ActivityIndicator, Modal, Text, TouchableOpacity, ScrollView, Platform, Alert } from "react-native";
 import { WebView } from "react-native-webview";
 import { useNavigation, useRouter } from 'expo-router';
 import { COLORS } from "../../constants/colors";
 import { Ionicons } from "@expo/vector-icons";
-import { AI_API_URL } from "../../constants/api";
+import { AI_API_URL, API_URL } from "../../constants/api";
 
 // Source display names & colors for legend badges
 const SOURCE_INFO = {
@@ -12,6 +12,7 @@ const SOURCE_INFO = {
   gdacs: { name: "GDACS", color: "#ea4335" },
   usgs: { name: "USGS", color: "#fbbc05" },
   reliefweb: { name: "ReliefWeb", color: "#34a853" },
+  community: { name: "Comunidad iAlert", color: "#2e9e5b" },
   default: { name: "Unknown", color: "#9aa0a6" },
 };
 
@@ -41,6 +42,37 @@ const DISASTER_INFO = {
 export default function GlobeMap({ style }) {
   const navigation = useNavigation();
   const router = useRouter();
+
+  // Map a globe event (AI-service id) to its incident in our database
+  const resolveIncidentId = async (evt) => {
+    if (!evt) return null;
+    if (evt.incidentId) return evt.incidentId;
+    try {
+      const r = await fetch(`${API_URL}/incidents/by-source?source=${encodeURIComponent(evt.source)}&id=${encodeURIComponent(evt.id)}`);
+      if (!r.ok) return null;
+      return (await r.json()).incidentId;
+    } catch (_) {
+      return null;
+    }
+  };
+  const openInFeed = async () => {
+    const incidentId = await resolveIncidentId(selectedEvent);
+    if (!incidentId) return Alert.alert('Aún no disponible', 'Este evento todavía no está en el feed. Intenta de nuevo en unos minutos.');
+    setModalVisible(false);
+    router.push(`/incident/${incidentId}`);
+  };
+  const reportOnThis = async () => {
+    const incidentId = await resolveIncidentId(selectedEvent);
+    setModalVisible(false);
+    router.push({
+      pathname: '/report',
+      params: {
+        category: selectedEvent?.category,
+        title: selectedEvent?.title,
+        ...(incidentId ? { incidentId: String(incidentId) } : {}),
+      },
+    });
+  };
   const [htmlContent, setHtmlContent] = useState(null);
   const [loading, setLoading] = useState(true);
   const [modalVisible, setModalVisible] = useState(false);
@@ -314,6 +346,28 @@ export default function GlobeMap({ style }) {
           ...evt,
           source: evt.source || 'eonet',
         }));
+
+        // Add community-reported incidents from our own backend so the globe matches the feed
+        try {
+          const r2 = await fetch(`${API_URL}/incidents?origin=community&promoted=true&status=active&limit=200`);
+          if (r2.ok) {
+            const d2 = await r2.json();
+            (d2.incidents || []).forEach((i) => {
+              normalizedEvents.push({
+                id: `community-${i.id}`,
+                incidentId: i.id,
+                title: i.title,
+                description: i.latestReport?.description || '',
+                category: i.category,
+                lat: parseFloat(i.latitude),
+                lng: parseFloat(i.longitude),
+                date: i.startedAt,
+                source: 'community',
+                severity: i.severity,
+              });
+            });
+          }
+        } catch (_) {}
         
         const counts = {};
         const sourceCountsMap = {};
@@ -549,6 +603,13 @@ export default function GlobeMap({ style }) {
                 <Text style={modalStyles.description}>{selectedEvent.description}</Text>
               ) : null}
 
+              <TouchableOpacity
+                style={{ backgroundColor: '#2e9e5b', padding: 12, borderRadius: 10, alignItems: 'center', marginVertical: 8 }}
+                onPress={openInFeed}
+              >
+                <Text style={{ color: '#fff', fontWeight: '700' }}>Ver más en el feed (reportes, votos, qué hacer)</Text>
+              </TouchableOpacity>
+
               <View style={modalStyles.infoSection}>
                 <Ionicons name="location" size={20} color={COLORS.primary} />
                 <Text style={modalStyles.infoText}>
@@ -581,10 +642,7 @@ export default function GlobeMap({ style }) {
               {/* Citizen Reporting CTA */}
               <TouchableOpacity
                 style={modalStyles.reportCtaBtn}
-                onPress={() => {
-                  setModalVisible(false);
-                  router.push("/(tabs)/report");
-                }}
+                onPress={reportOnThis}
               >
                 <Ionicons name="megaphone-outline" size={18} color={COLORS.primary} />
                 <Text style={modalStyles.reportCtaText}>Report Observations for this Zone</Text>

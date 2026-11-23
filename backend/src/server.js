@@ -16,7 +16,9 @@ import { healthCheckJob, photoJob } from "./config/cron.js";
 
 import alertsRouter from "./routes/alerts.routes.js";
 import { incidentsRouter, reportsRouter } from "./routes/incidents.routes.js";
+import { mediaRouter } from "./routes/media.routes.js";
 
+import { ingestFromAI, archiveStale } from "./services/ingest.js";
 import fetch from "node-fetch";
 import cors from "cors";
 
@@ -24,7 +26,7 @@ const app = express();
 
 app.use(cors());
 app.use("/api/webhooks", express.raw({ type: "application/json" }), webhooksRouter);
-app.use(express.json());
+app.use(express.json({ limit: "12mb" })); // photo uploads arrive as base64
 
 // 5001 is the canonical backend port (agrees with env.js default and README).
 const PORT = ENV.PORT || 5001;
@@ -38,6 +40,13 @@ if (ENV.KEEP_ALIVE) {
   photoJob.start();
   // eonetCheckJob.start(); // Uncomment if you have this
   console.log("Cron jobs started successfully");
+}
+
+// Pull official events from the AI service every 15 min (INGEST_ENABLED=true locally to test)
+if (ENV.INGEST_ENABLED) {
+  const run = () => ingestFromAI(db, ENV.AI_SERVICE_URL).then(async (st) => { console.log("ingest:", st); console.log("archived stale:", await archiveStale(db)); }).catch((e) => console.error("ingest failed:", e.message));
+  setTimeout(run, 5000);
+  setInterval(run, 15 * 60 * 1000);
 }
 
 // =========================
@@ -368,6 +377,7 @@ app.use("/api/alerts", alertsRouter);
 // =========================
 app.use("/api/incidents", incidentsRouter);
 app.use("/api/reports", reportsRouter);
+app.use("/api/media", mediaRouter);
 
 // =========================
 //    AI PREDICTION (Optional - for production, this should be removed or secured)

@@ -1,4 +1,4 @@
-import { pgTable, serial, text, timestamp, integer, date, numeric, jsonb, unique, uuid, boolean} from "drizzle-orm/pg-core";
+import { pgTable, serial, text, timestamp, integer, date, numeric, jsonb, unique, uuid, boolean, smallint, uniqueIndex} from "drizzle-orm/pg-core";
 import { relations } from "drizzle-orm";
 
 export const weatherCacheTable = pgTable("weather_cache", {
@@ -72,6 +72,20 @@ export const incidentsTable = pgTable("incidents", {
   resolvedAt: timestamp("resolved_at"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
+  // --- feed branch (migration 0006) ---
+  origin: text("origin").default("official"), // official | community
+  trustScore: integer("trust_score").default(0),
+  trustTier: text("trust_tier").default("unverified"), // unverified | likely | legit
+  upvotes: integer("upvotes").default(0),
+  downvotes: integer("downvotes").default(0),
+  stillYes: integer("still_yes").default(0),
+  stillNo: integer("still_no").default(0),
+  mergeFlags: integer("merge_flags").default(0),
+  lastConfirmedAt: timestamp("last_confirmed_at").defaultNow(),
+  archivedAt: timestamp("archived_at"),
+  promoted: boolean("promoted").default(false),
+  promotedAt: timestamp("promoted_at"),
+  adminDecision: text("admin_decision"), // approve | reject
 });
 
 export const incidentSourcesTable = pgTable("incident_sources", {
@@ -101,6 +115,47 @@ export const incidentReportsTable = pgTable("incident_reports", {
   photos: jsonb("photos").default([]),
   verified: boolean("verified").default(false),
   createdAt: timestamp("created_at").defaultNow(),
+  media: jsonb("media").default([]), // [{url, source: 'camera'|'gallery'}]
+  originalIncidentId: integer("original_incident_id"),
+  distanceKm: numeric("distance_km", { precision: 8, scale: 1 }),
+  language: text("language"),
+});
+
+export const incidentVotesTable = pgTable(
+  "incident_votes",
+  {
+    id: serial("id").primaryKey(),
+    incidentId: integer("incident_id")
+      .notNull()
+      .references(() => incidentsTable.id, { onDelete: "cascade" }),
+    userId: text("user_id")
+      .notNull()
+      .references(() => usersTable.userId, { onDelete: "cascade" }),
+    kind: text("kind").notNull(), // vote | still_there | wrong_merge
+    value: smallint("value").notNull(),
+    distanceKm: numeric("distance_km", { precision: 8, scale: 1 }),
+    createdAt: timestamp("created_at").defaultNow(),
+  },
+  (t) => [uniqueIndex("uq_incident_votes").on(t.incidentId, t.userId, t.kind)],
+);
+
+export const categoryMergeConfigTable = pgTable("category_merge_config", {
+  category: text("category").primaryKey(),
+  radiusKm: numeric("radius_km", { precision: 8, scale: 2 }).notNull(),
+  windowHours: integer("window_hours").notNull(),
+  staleHours: integer("stale_hours").notNull(),
+});
+
+export const recommendationsTable = pgTable("recommendations", {
+  id: serial("id").primaryKey(),
+  category: text("category").notNull(),
+  phase: text("phase").notNull().default("during"), // before | during | after
+  language: text("language").notNull().default("en"),
+  title: text("title").notNull(),
+  body: text("body").notNull(),
+  sourceOrg: text("source_org").notNull(),
+  sourceUrl: text("source_url"),
+  position: integer("position").default(0),
 });
 
 export const incidentsRelations = relations(incidentsTable, ({ many }) => ({

@@ -5,6 +5,13 @@ export const ENV = {
   PORT: process.env.PORT || 5001,
   DATABASE_URL: process.env.DATABASE_URL,
   NODE_ENV: process.env.NODE_ENV || "development",
+  AI_SERVICE_URL: process.env.AI_SERVICE_URL || "https://ialert-ai-service.onrender.com",
+  SUPABASE_URL: process.env.SUPABASE_URL,
+  SUPABASE_SERVICE_KEY: process.env.SUPABASE_SERVICE_KEY, // server-only, never ship to the app
+  SUPABASE_BUCKET: process.env.SUPABASE_BUCKET || "incident-media",
+  ADMIN_USER_IDS: (process.env.ADMIN_USER_IDS || "").split(",").map((x) => x.trim()).filter(Boolean), // Clerk user ids
+  INGEST_SECRET: process.env.INGEST_SECRET, // protects POST /api/incidents/ingest
+  INGEST_ENABLED: process.env.INGEST_ENABLED !== undefined ? process.env.INGEST_ENABLED === "true" : process.env.NODE_ENV === "production",
   OPENWEATHER_API_KEY: process.env.OPENWEATHER_API_KEY,
   CLERK_WEBHOOK_SECRET: process.env.CLERK_WEBHOOK_SECRET,  // ← ADD THIS
   // Smart API_URL: uses env var in production, localhost in dev
